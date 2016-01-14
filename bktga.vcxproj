@@ -102,7 +102,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <EnablePREfast>false</EnablePREfast>
-      <DisableSpecificWarnings>4710; 4514</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4710;4514;4371;4626;4820;4668</DisableSpecificWarnings>
       <SmallerTypeCheck>true</SmallerTypeCheck>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
@@ -117,7 +117,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <EnablePREfast>false</EnablePREfast>
-      <DisableSpecificWarnings>4710; 4514</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4710;4514;4371;4626;4820;4668</DisableSpecificWarnings>
       <SmallerTypeCheck>true</SmallerTypeCheck>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
@@ -134,7 +134,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <EnablePREfast>false</EnablePREfast>
-      <DisableSpecificWarnings>4710; 4514</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4710;4514;4371;4626;4820;4668</DisableSpecificWarnings>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>
@@ -152,7 +152,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <EnablePREfast>false</EnablePREfast>
-      <DisableSpecificWarnings>4710; 4514</DisableSpecificWarnings>
+      <DisableSpecificWarnings>4710;4514;4371;4626;4820;4668</DisableSpecificWarnings>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
     </ClCompile>

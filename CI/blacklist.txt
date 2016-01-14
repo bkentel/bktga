@@ -1,0 +1,8 @@
+# libstdc++ has a bug in ios_base
+src:*/include/c\+\+/*
+
+# The above, but for older clang versions on Travis
+#src:/usr/bin/\.\./lib/gcc/x86_64-linux-gnu/4\.9/\.\./\.\./\.\./\.\./include/c\+\+/4\.9/bits/ios_base\.h
+#src:/usr/bin/\.\./lib/gcc/x86_64-linux-gnu/4\.9/\.\./\.\./\.\./\.\./include/c\+\+/4\.9/bits/.*
+#src:/usr/bin/\.\./lib/gcc/x86_64-linux-gnu/4\.9/\.\./\.\./\.\./\.\./include/c\+\+/4\.9/.*
+#src:ios_base.h

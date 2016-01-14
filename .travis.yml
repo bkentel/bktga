@@ -3,6 +3,7 @@ sudo: false
 
 cache:
   ccache: true
+  directories: ${TRAVIS_BUILD_DIR}/deps
 
 env:
   global:
@@ -29,8 +30,8 @@ matrix:
       addons: &clang35
         apt:
           sources: ['llvm-toolchain-precise-3.5', 'ubuntu-toolchain-r-test']
-          packages: ['clang-3.5']
-      env: COMPILER='ccache clang++-3.5'
+          packages: ['clang-3.5', 'g++-4.9']
+      env: COMPILER='ccache clang++-3.5' SANITIZE='-fsanitize=address,undefined,integer'
 
     - os: linux
       compiler: clang
@@ -38,7 +39,7 @@ matrix:
         apt:
           sources: ['llvm-toolchain-precise-3.6', 'ubuntu-toolchain-r-test']
           packages: ['clang-3.6']
-      env: COMPILER='ccache clang++-3.6'
+      env: COMPILER='ccache clang++-3.6' SANITIZE='-fsanitize=address,undefined,integer'
 
     - os: linux
       compiler: clang
@@ -54,26 +55,18 @@ matrix:
         apt:
           sources: ['llvm-toolchain-precise', 'ubuntu-toolchain-r-test']
           packages: ['clang-3.8']
-      env: COMPILER='ccache clang++-3.8'
+      env: COMPILER='ccache clang++-3.8' COVERAGE='--coverage -O0'
 
     ################################################################################################
     # Linux GCC Builds
     ################################################################################################
     - os: linux
       compiler: gcc
-      addons: &gcc48
-        apt:
-         sources: ['ubuntu-toolchain-r-test']
-         packages: ['g++-4.8']
-      env: COMPILER='ccache g++-4.8'
-
-    - os: linux
-      compiler: gcc
       addons: &gcc49
         apt:
           sources: ['ubuntu-toolchain-r-test']
           packages: ['g++-4.9']
-      env: COMPILER='ccache g++-4.9'
+      env: COMPILER='ccache g++-4.9' SANITIZE='-fsanitize=address,undefined'
 
     - os: linux
       compiler: gcc
@@ -81,7 +74,7 @@ matrix:
         apt:
           sources: ['ubuntu-toolchain-r-test']
           packages: ['g++-5']
-      env: COMPILER='ccache g++-5'
+      env: COMPILER='ccache g++-5' SANITIZE='-fsanitize=address,undefined'
 
     ################################################################################################
     # OSX Clang Builds
@@ -94,10 +87,24 @@ matrix:
     - os: osx
       osx_image: xcode7
       compiler: clang
-      env: COMPILER='ccache clang++'
+      env: COMPILER='ccache clang++' SANITIZE='-fsanitize=address'
+
+install:
+  - |
+    if [[ "${TRAVIS_OS_NAME}" == "osx" ]]; then
+      brew install ccache
+    fi
 
 before_script:
   - export CXX=${COMPILER}
   - cd ${TRAVIS_BUILD_DIR}
+  - . ./CI/get-deps.sh
+  - echo $INCLUDE
+
 script:
   - make -j 2 && ./bktga_test
+  
+after_success:
+  - ls -al
+  - gcov tga.hpp tga.t.cpp
+  - bash <(curl -s https://codecov.io/bash)
