@@ -1,0 +1,1 @@
+A c++14 header only TGA file parsing and converting library.
