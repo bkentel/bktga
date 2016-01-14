@@ -27,7 +27,7 @@ OBJS=$(subst .cpp,.o,$(SRCS))
 all: bkassert
 
 bkassert: $(OBJS)
-	$(CXX) $(LDFLAGS) $(SANITIZE) -o bkassert_test $(OBJS) $(LDLIBS) 
+	$(CXX) $(LDFLAGS) $(SANITIZE) -o bktga_test $(OBJS) $(LDLIBS) 
 
 depend: .depend
 
