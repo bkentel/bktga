@@ -184,29 +184,17 @@ struct read_n_bytes_checker {
     }
 };
 
-template <size_t N>
-std::istringstream make_istream(char const (&s)[N]) {
-    return std::istringstream {
-        std::string {
-            std::begin(s), std::end(s)}
-      , std::ios::binary};
-}
-
-template <size_t N>
-std::istringstream make_istream(std::array<char, N> const& s) {
-    return std::istringstream {
-        std::string {
-            begin(s), end(s)}
-      , std::ios::binary};
-}
-
 } //namespace
 
 TEST_CASE("detail::read_n_bytes", "[detail]") {
     constexpr char data[] =
         "\x11\x22\x33\x44\x55\x66\x77\x88\x99\xAA\xBB\xCC\xDD\xEE\xFF";
 
-    auto in = make_istream(data);
+    // pre gcc5 libstdc++ is broken w.r.t moving / swapping streams.
+    std::istringstream in {
+        std::string {
+            std::begin(data), std::end(data)}
+      , std::ios::binary};
 
     using iterator_t = std::istreambuf_iterator<char>;
     iterator_t const beg {in};
@@ -242,6 +230,13 @@ namespace {
 
 struct read_n_bits_checker {
     std::istringstream in;
+
+    template <typename T>
+    explicit read_n_bits_checker(T const& source)
+      : in {std::string {std::begin(source), std::end(source)}
+          , std::ios::binary}
+    {
+    }
 
     template <size_t N, typename T>
     bool apply(T const value, char const next) {
@@ -291,7 +286,8 @@ TEST_CASE("detail::read_n_bits", "[detail]") {
       , static_cast<char>(0b1111'1111u)
     };
 
-    read_n_bits_checker check {make_istream(data)};
+    // pre gcc5 libstdc++ is broken w.r.t moving / swapping streams.
+    read_n_bits_checker check {data};
 
     REQUIRE(check.apply< 1>(make_int(0b0000'0001), data[1]));
     REQUIRE(check.apply< 2>(make_int(0b0000'0001), data[1]));
@@ -412,7 +408,11 @@ TEST_CASE("id and color map", "[bktga]") {
         "TRUEVISION-XFILE."
     };
 
-    auto in     = make_istream(data);
+    std::istringstream in {
+        std::string {
+            std::begin(data), std::end(data)}
+      , std::ios::binary};
+
     auto result = bktga::check_file(in);
 
     auto const& tga = *result.first;
@@ -423,9 +423,12 @@ TEST_CASE("id and color map", "[bktga]") {
     constexpr char expected_id[]      = "abcd";
 
     auto const make_range = [](auto const beg, auto const size) {
-        return bktga::tga_descriptor::range_t {
-            static_cast<ptrdiff_t>(beg), static_cast<ptrdiff_t>(beg + size)
-        };
+        REQUIRE(beg  >= 0);
+        REQUIRE(size >= 0);
+
+        auto const a = static_cast<ptrdiff_t>(beg);
+        auto const b = static_cast<ptrdiff_t>(size);
+        return bktga::tga_descriptor::range_t {a, a + b};
     };
 
     auto const id_range    = make_range(bktga::header_size,      expected_id_len);
@@ -439,7 +442,7 @@ TEST_CASE("id and color map", "[bktga]") {
     REQUIRE(std::equal(std::begin(tga.id), std::end(tga.id), std::begin(expected_id)));
 
     bktga::tga_color_map const cmap {tga, in};
-    REQUIRE(cmap.size() == 4);
+    REQUIRE(cmap.size() == 4u);
 
     std::array<uint32_t, 4> const expected_cmap {
         bktga::detail::to_rgba<16>(0x10)
@@ -468,7 +471,12 @@ TEST_CASE("check_file", "[bktga]") {
             "\x00"     //image descriptor
         };
 
-        auto const result = bktga::check_file(make_istream(data));
+        std::istringstream in {
+            std::string {
+                std::begin(data), std::end(data)}
+          , std::ios::binary};
+
+        auto const result = bktga::check_file(in);
         REQUIRE(!!result.first);
         REQUIRE(result.second.empty());
 
@@ -513,7 +521,12 @@ TEST_CASE("check_file", "[bktga]") {
             "TRUEVISION-XFILE."
         };
 
-        auto const result = bktga::check_file(make_istream(data));
+        std::istringstream in {
+            std::string {
+                std::begin(data), std::end(data)}
+          , std::ios::binary};
+
+        auto const result = bktga::check_file(in);
         REQUIRE(!!result.first);
         REQUIRE(result.second.empty());
 
@@ -539,7 +552,7 @@ TEST_CASE("check_file", "[bktga]") {
 }
 
 TEST_CASE("write raw", "[output]") {
-    constexpr char filename[] = R"(D:\Users\Brandon\Downloads\256 Colors (RLE).tga)";
+    constexpr char filename[] = R"(./test/8-bit-rle.tga)";
 
     auto result = bktga::check_file(filename);
     REQUIRE(result.first);
@@ -551,7 +564,8 @@ TEST_CASE("write raw", "[output]") {
 
     std::ofstream out{R"(./out.raw)", std::ios::binary};
     out.write(reinterpret_cast<char const*>(decoded.data()),
-              decoded.size() * sizeof(uint32_t));
+              static_cast<std::streamsize>(
+                  decoded.size() * sizeof(uint32_t)));
 }
 
 #if defined(_MSC_VER)

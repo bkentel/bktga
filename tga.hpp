@@ -87,12 +87,11 @@ static constexpr auto all_exceptions =
 //! An unsigned type of exactly N bytes, or void.
 //==============================================================================
 template <size_t N>
-using uint_t =
-    std::conditional_t<N <= 0, void,
-    std::conditional_t<N <= 1, std::uint8_t,
-    std::conditional_t<N <= 2, std::uint16_t,
-    std::conditional_t<N <= 4, std::uint32_t,
-    std::conditional_t<N <= 8, std::uint64_t, void>>>>>;
+using uint_t = std::conditional_t<N < 1, void,
+               std::conditional_t<N < 2, std::uint8_t,
+               std::conditional_t<N < 3, std::uint16_t,
+               std::conditional_t<N < 5, std::uint32_t,
+               std::conditional_t<N < 9, std::uint64_t, void>>>>>;
 
 //==============================================================================
 //! Return the number of bytes (rounded up) required for @p n bits where
@@ -149,8 +148,8 @@ inline uint32_t to_rgba(uint32_t const n, bit_width<15>) noexcept {
         return b8 << i * 8;
     };
 
-    //      red      green    blue
-    return {get(0) | get(1) | get(2) | 0xFF000000u};
+    //     red      green    blue     alpha
+    return get(0) | get(1) | get(2) | 0xFF000000u;
 }
 
 //==============================================================================
@@ -195,11 +194,11 @@ inline uint32_t to_rgba(T const n) noexcept {
 }
 
 //==============================================================================
-//! Construct a @p T from @p N bytes of data from the range [@p it, @p end).
-//! The @p N bytes of data are interpreted as being little endian.
+//! Construct an unsigned integer from @p N bytes of data from the range given
+//! by [@p it, @p end); the @p N bytes of data are interpreted as being in
+//! little endian order.
 //!
-//! @tparam T An unsigned type.
-//! @tparam N A number of bytes. 0 <= N <= sizeof(T).
+//! @tparam N A number of bytes to read; 0 <= N <= 8.
 //!
 //! @return A tuple: (value, next) where is it + N, or end.
 //==============================================================================
@@ -652,7 +651,7 @@ struct tga_descriptor {
       , image_desc  {field::read(field::image_desc  {}, header)}
       , ext_offset  {field::read(field::ext_offset  {}, footer)}
       , dev_offset  {field::read(field::dev_offset  {}, footer)}
-      , signature   {get_signature(footer)}
+      , signature   (get_signature(footer))  // () instead of {} to make older clang and gcc happy
       , size        {total_size}
       , version     {validate(in)}
       , id          {get_id(in)}
@@ -667,7 +666,7 @@ struct tga_descriptor {
     static bool has_footer(signature_t const& signature) noexcept {
         constexpr char footer_signature[] {"TRUEVISION-XFILE."};
 
-        constexpr auto size0 = decltype(signature){}.size();
+        constexpr auto size0 = std::remove_reference_t<decltype(signature)>().size();
         constexpr auto size1 = std::extent<decltype(footer_signature)>::value;
 
         static_assert(size0 == size1, "");
@@ -768,8 +767,6 @@ struct tga_descriptor {
         case it::rle_grayscale:    return validate_image_type(image_type_t<it::rle_grayscale> {});
         case it::unknown_reserved: return validate_image_type(image_type_t<it::unknown_reserved> {});
         case it::unknown_custom:   return validate_image_type(image_type_t<it::unknown_custom> {});
-        default:
-            break;
         }
 
         return false;
@@ -861,7 +858,7 @@ struct tga_descriptor {
     field::image_desc::type  image_desc  {};
     field::ext_offset::type  ext_offset  {};
     field::dev_offset::type  dev_offset  {};
-    field::signature::type   signature   {};
+    field::signature::type   signature   {{}}; // to make older clang and gcc happy
     ////////////////////////////////////////////////////////////////////////////
     size_t                   size        {};
     tga_version              version     {tga_version::invalid};
@@ -1212,7 +1209,7 @@ check_file(string_view const filename) {
 
     try {
         in.open(filename.to_string().c_str(), std::ios::binary);
-    } catch (std::ios::failure const& e) {
+    } catch (std::ios::failure const&) {
         return {{}, "IO failure."};
     }
 
