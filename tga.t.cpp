@@ -18,6 +18,7 @@
 #define CATCH_CONFIG_MAIN
 #include <Catch/catch.hpp>
 
+#include <iostream>
 #include <string>
 #include <sstream>
 #include <iterator>
@@ -554,7 +555,7 @@ TEST_CASE("check_file", "[bktga]") {
 TEST_CASE("write raw", "[output]") {
     constexpr char filename[] = R"(./test/8-bit-rle.tga)";
 
-    auto result = bktga::check_file(filename);
+    auto const result = bktga::check_file(filename);
     REQUIRE(result.first);
 
     auto const& tga = *result.first;
@@ -566,6 +567,25 @@ TEST_CASE("write raw", "[output]") {
     out.write(reinterpret_cast<char const*>(decoded.data()),
               static_cast<std::streamsize>(
                   decoded.size() * sizeof(uint32_t)));
+}
+
+TEST_CASE("example 1", "[example]") {
+    constexpr char filename[] = "./test/8-bit-rle.tga";
+
+    // std::pair<optional, string_view>
+    auto const result = bktga::check_file(filename);
+    if (!result.first) {
+        std::cerr << "Error: " << result.second.to_string() << std::endl;
+        //return 1;
+    }
+
+    // bktga::tga_descriptor
+    auto const& tga = *result.first;
+
+    // std::vector<uint32_t>
+    auto converted = bktga::decode(tga, filename);
+
+    //return 0;
 }
 
 #if defined(_MSC_VER)

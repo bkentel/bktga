@@ -1171,6 +1171,18 @@ inline std::vector<uint32_t> decode(tga_descriptor const& tga, std::istream&& in
     return decode(tga, in);
 }
 
+//! @throws: std::ios::failure
+inline std::vector<uint32_t> decode(
+    tga_descriptor const& tga
+  , string_view    const  filename
+) {
+    std::ifstream in;
+    in.exceptions(detail::all_exceptions);
+    in.open(filename.to_string().c_str(), std::ios::binary);
+
+    return decode(tga, in);
+}
+
 //==============================================================================
 //! Determines whether the stream @p in specifies a valid TGA file and
 //! returns a valid tga_descriptor and an empty string, otherwise returns an
