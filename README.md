@@ -1,4 +1,4 @@
-# BKTGA [![travis-ci.org][badge.travis]][travis] [![codecov.io][badge.codecov]][codecov]
+# BKTGA [![travis-ci.org][badge.travis]][travis] [![Build status][badge.appveyor]][appveyor] [![codecov.io][badge.codecov]][codecov]
 
 A c++14 header only TGA file parsing and conversion library.
 
@@ -48,5 +48,7 @@ Other compiler + standard library version combinations might work, but the follo
 <!-- Links -->
 [travis]: https://travis-ci.org/bkentel/bktga?branch=master
 [codecov]: https://codecov.io/github/bkentel/bktga?branch=master
+[appveyor]: https://ci.appveyor.com/project/bkentel/bktga/branch/master
 [badge.travis]: https://travis-ci.org/bkentel/bktga.svg?branch=master
 [badge.codecov]: https://codecov.io/github/bkentel/bktga/coverage.svg?branch=master
+[badge.appveyor]: https://ci.appveyor.com/api/projects/status/k0bsdcmy98scppjm/branch/master?svg=true
