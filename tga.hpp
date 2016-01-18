@@ -161,17 +161,24 @@ inline uint32_t to_rgba(uint32_t const n, bit_width<16>) noexcept {
 }
 
 //==============================================================================
-//! 24-bit to 32-bit (alpha 255)
-//==============================================================================
-inline uint32_t to_rgba(uint32_t const n, bit_width<24>) noexcept {
-    return n | 0xFF000000u;
-}
-
-//==============================================================================
 //! 32-bit to 32-bit (noop)
 //==============================================================================
 inline uint32_t to_rgba(uint32_t const n, bit_width<32>) noexcept {
-    return n;
+    //AARRGGBB
+
+    auto const a = (n & 0xFF000000u) >> 24;
+    auto const r = (n & 0x00FF0000u) >> 16;
+    auto const g = (n & 0x0000FF00u) >>  8;
+    auto const b = (n & 0x000000FFu) >>  0;
+
+    return (r << 0) | (g << 8) | (b << 16) | (a << 24);
+}
+
+//==============================================================================
+//! 24-bit to 32-bit (alpha 255)
+//==============================================================================
+inline uint32_t to_rgba(uint32_t const n, bit_width<24>) noexcept {
+    return to_rgba(n, bit_width<32> {}) | 0xFF000000u;
 }
 
 //==============================================================================
@@ -981,7 +988,9 @@ auto decode_rle(
   , size_t      const n
 ) {
     auto const result = read_n_bits<Bits>(it, end);
-    auto const pixel  = mapper(std::get<0>(result));
+    auto const value  = std::get<0>(result);
+    auto const rgba   = to_rgba<Bits>(value);
+    auto const pixel  = mapper(rgba);
 
     for (size_t i = 0; i < n; ++i) {
         *out++ = pixel;
@@ -1006,7 +1015,9 @@ auto decode_rle(
 ) {
     for (size_t i = 0; i < n; ++i) {
         auto const result = read_n_bits<Bits>(it, end);
-        auto const pixel  = mapper(std::get<0>(result));
+        auto const value  = std::get<0>(result);
+        auto const rgba   = to_rgba<Bits>(value);
+        auto const pixel  = mapper(rgba);
 
         *out++ = pixel;
         it = std::get<1>(result);

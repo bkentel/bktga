@@ -91,6 +91,9 @@ TEST_CASE("detail::to_rgba", "[detail]") {
 
     using array_t = std::array<uint32_t, 5> const;
 
+    // tga colors are stored in the file as
+    // BB GG RR AA -> 0xAARRGGBB
+
     REQUIRE(test_int_types(t1 {}, 0, array_t {
         0xFF000000
       , 0xFF000000
@@ -102,15 +105,15 @@ TEST_CASE("detail::to_rgba", "[detail]") {
         0xFFFFFFFF
       , 0xFF0039FF
       , 0x000039FF
-      , 0xFF0000FF
-      , 0x000000FF}));
+      , 0xFFFF0000
+      , 0x00FF0000}));
 
     REQUIRE(test_int_types(t1 {}, 0x1F, array_t {
         0xFF1F1F1F
       , 0xFF0000FF
       , 0x000000FF
-      , 0xFF00001F
-      , 0x0000001F}));
+      , 0xFF1F0000
+      , 0x001F0000}));
 
     using t2 = std::tuple<
         wchar_t
@@ -121,29 +124,29 @@ TEST_CASE("detail::to_rgba", "[detail]") {
         0xFFFFFFFF
       , 0xFFFFFFFF
       , 0xFFFFFFFF
-      , 0xFF00FFFF
-      , 0x0000FFFF}));
+      , 0xFFFFFF00
+      , 0x00FFFF00}));
 
     REQUIRE(test_int_types(t2 {}, 0x7FFF, array_t {
         0xFFFFFFFF
       , 0xFFFFFFFF
       , 0x00FFFFFF
-      , 0xFF007FFF
-      , 0x00007FFF}));
+      , 0xFFFF7F00
+      , 0x00FF7F00}));
 
     REQUIRE(test_int_types(t2 {}, 0x0421, array_t {
         0xFF212121
       , 0xFF080808
       , 0x00080808
-      , 0xFF000421
-      , 0x00000421}));
+      , 0xFF210400
+      , 0x00210400}));
 
     REQUIRE(test_int_types(t2 {}, 0x8421, array_t {
         0xFF212121
       , 0xFF080808
       , 0xFF080808
-      , 0xFF008421
-      , 0x00008421}));
+      , 0xFF218400
+      , 0x00218400}));
 
     using t4 = std::conditional_t<sizeof(wchar_t) >= 4
       , std::tuple<wchar_t, int32_t,  int64_t, uint32_t, uint64_t>
@@ -552,8 +555,8 @@ TEST_CASE("check_file", "[bktga]") {
     }
 }
 
-TEST_CASE("write raw", "[output]") {
-    constexpr char filename[] = R"(./test/8-bit-rle.tga)";
+TEST_CASE("file - 4-color", "[file]") {
+    constexpr char filename[] = R"(./test/4-color.tga)";
 
     auto const result = bktga::check_file(filename);
     REQUIRE(result.first);
@@ -563,10 +566,69 @@ TEST_CASE("write raw", "[output]") {
     auto const decoded = bktga::decode(
         tga, std::ifstream {filename, std::ios::binary});
 
-    std::ofstream out{R"(./out.raw)", std::ios::binary};
-    out.write(reinterpret_cast<char const*>(decoded.data()),
-              static_cast<std::streamsize>(
-                  decoded.size() * sizeof(uint32_t)));
+    auto const pixel_at = [&](size_t const x, size_t const y) {
+        auto const w = tga.width;
+        auto const h = tga.height;
+
+        REQUIRE(x < w);
+        REQUIRE(y < h);
+
+        return decoded[y * w + x];
+    };
+
+    REQUIRE(tga.width  == 16);
+    REQUIRE(tga.height == 16);
+    REQUIRE(tga.pixel_depth == 32);
+
+    constexpr std::array<size_t, 4> xs {0x0, 0xF, 0x0, 0xF};
+    constexpr std::array<size_t, 4> ys {0x0, 0x0, 0xF, 0xF};
+
+    REQUIRE(pixel_at(xs[0], ys[0]) == 0xAA'FF'00'00); //top    left  - blue
+    REQUIRE(pixel_at(xs[1], ys[1]) == 0xAA'00'FF'00); //top    right - green
+    REQUIRE(pixel_at(xs[2], ys[2]) == 0xAA'00'00'FF); //bottom left  - red
+    REQUIRE(pixel_at(xs[3], ys[3]) == 0xAA'FF'00'7F); //bottom right - purple
+
+    auto const is_skip_pixel = [&](size_t const x, size_t const y) {
+        for (size_t i = 0; i < xs.size(); ++i) {
+            if (xs[i] == x && ys[i] == y) {
+                return true;
+            }
+        }
+
+        return false;
+    };
+
+    for (size_t yi = 0; yi < tga.height; ++yi) {
+        for (size_t xi = 0; xi < tga.width; ++xi) {
+            if (is_skip_pixel(xi, yi)) {
+                continue;
+            }
+
+            REQUIRE(pixel_at(xi, yi) == 0xAAFFFFFF);
+        }
+    }
+}
+
+TEST_CASE("convert all", "[output]") {
+    constexpr std::array<char const*, 2> filenames {
+        "./test/8-bit-rle.tga"
+      , "./test/4-color.tga"
+    };
+
+    for (auto const filename : filenames) {
+        auto const result = bktga::check_file(filename);
+        REQUIRE(result.first);
+
+        auto const& tga = *result.first;
+        auto const decoded = bktga::decode(
+            tga, std::ifstream {filename, std::ios::binary});
+
+        auto const outname = std::string {filename} + ".out.raw";
+
+        std::ofstream out {outname, std::ios::binary};
+        out.write(reinterpret_cast<char const*>(decoded.data()),
+            static_cast<std::streamsize>(decoded.size() * sizeof(uint32_t)));
+    }
 }
 
 TEST_CASE("example 1", "[example]") {
