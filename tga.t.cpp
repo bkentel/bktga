@@ -28,34 +28,46 @@
 #include <Catch/catch.hpp>
 
 #include <algorithm>
+#include <array>
 
 namespace detail = bktga::detail;
 
-TEST_CASE("header", "[tga]") {
-    constexpr std::array<uint8_t, 18> mem_data {
+TEST_CASE("detect", "[tga]") {
+    constexpr uint8_t header_data[] {
         0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
       , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
     };
 
-    auto const result = bktga::detect(mem_data);
-    REQUIRE(result);
-    auto const& tga = *result.tga;
+    auto const check = [](auto const& result) {
+        REQUIRE(result);
+        auto const& tga = *result.tga;
 
-    REQUIRE(tga.id_length   == 0);
-    REQUIRE(tga.cmap_type   == bktga::tga_color_map_type::present);
-    REQUIRE(tga.img_type    == bktga::tga_image_type::rle_color_mapped);
-    REQUIRE(tga.cmap_start  == 0);
-    REQUIRE(tga.cmap_len    == 256);
-    REQUIRE(tga.cmap_depth  == 24);
-    REQUIRE(tga.x_offset    == 0);
-    REQUIRE(tga.y_offset    == 0);
-    REQUIRE(tga.width       == 756);
-    REQUIRE(tga.height      == 512);
-    REQUIRE(tga.pixel_depth == 8);
+        REQUIRE(tga.id_length   == 0);
+        REQUIRE(tga.cmap_type   == bktga::tga_color_map_type::present);
+        REQUIRE(tga.img_type    == bktga::tga_image_type::rle_color_mapped);
+        REQUIRE(tga.cmap_start  == 0);
+        REQUIRE(tga.cmap_len    == 256);
+        REQUIRE(tga.cmap_depth  == 24);
+        REQUIRE(tga.x_offset    == 0);
+        REQUIRE(tga.y_offset    == 0);
+        REQUIRE(tga.width       == 756);
+        REQUIRE(tga.height      == 512);
+        REQUIRE(tga.pixel_depth == 8);
 
-    REQUIRE(tga.image_desc.attribute_bits() == 0);
-    REQUIRE(tga.image_desc.interleave()     == bktga::tga_interleave::none);
-    REQUIRE(tga.image_desc.origin()         == bktga::tga_origin::lo_left);
+        REQUIRE(tga.image_desc.attribute_bits() == 0);
+        REQUIRE(tga.image_desc.interleave()     == bktga::tga_interleave::none);
+        REQUIRE(tga.image_desc.origin()         == bktga::tga_origin::lo_left);
+    };
+
+    SECTION("c-array") {
+        check(bktga::detect(header_data));
+    }
+
+    SECTION("std::array") {
+        std::array<uint8_t, bktga::tga_header_size> array;
+        std::copy(std::begin(header_data), std::end(header_data), begin(array));
+        check(bktga::detect(array));
+    }
 }
 
 TEST_CASE("fields", "[io]") {

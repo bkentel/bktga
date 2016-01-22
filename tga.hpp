@@ -298,17 +298,19 @@ private:
 /// in-memory data source
 class memory_source {
 public:
-    template <typename Size>
-    memory_source(char const* const data, Size const size) noexcept
-      : first_ {data}
-      , last_  {data + size}
-      , pos_   {data}
+    template <typename Byte, typename Size>
+    memory_source(Byte const* const data, Size const size) noexcept
+      : first_ {reinterpret_cast<char const*>(data)}
+      , last_  {first_ + size}
+      , pos_   {first_}
     {
         static_assert(std::is_integral<Size>::value, "");
+        static_assert(std::is_integral<Byte>::value, "");
+        static_assert(sizeof(Byte) == 1, "");
     }
 
     template <typename Container>
-    explicit memory_source(Container const& in)
+    explicit memory_source(Container const& in) noexcept
       : memory_source {in.data(), in.size()}
     {
     }
@@ -841,33 +843,32 @@ inline auto detect(read_from_file_t, string_view const filename)
     return detail::detect(detail::file_source {filename});
 }
 
-template <typename ByteT, size_t N>
-inline auto detect(ByteT const* const data, ptrdiff_t const size)
+template <typename Byte, typename Size>
+inline auto detect(Byte const* const data, Size const size)
     -> detect_result_t<detail::memory_source>
 {
-    static_assert(is_byte_type<ByteT>::value, "");
     return detail::detect(detail::memory_source {data, size});
 }
 
-template <typename ByteT, size_t N>
-inline auto detect(ByteT const* const beg, ByteT const* const end)
+template <typename Byte>
+inline auto detect(Byte const* const beg, Byte const* const end)
     -> detect_result_t<detail::memory_source>
 {
     return detect(beg, end - beg);
 }
 
-template <typename ByteT, size_t N>
-inline auto detect(std::array<ByteT, N> const& data)
+template <typename Byte, size_t N>
+inline auto detect(std::array<Byte, N> const& data)
     -> detect_result_t<detail::memory_source>
 {
-    return detect(data.data(), N);
+    return detect(data.data(), data.data() + N);
 }
 
-template <typename ByteT, size_t N>
-inline auto detect(ByteT const (&data)[N])
+template <typename Byte, size_t N>
+inline auto detect(Byte const (&data)[N])
     -> detect_result_t<detail::memory_source>
 {
-    return detect(data, N);
+    return detect(data + 0, data + N);
 }
 
 //===----------------------------------------------------------------------===//
