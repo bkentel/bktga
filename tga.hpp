@@ -23,10 +23,6 @@
 #   include <boost/utility/string_ref.hpp>
 #endif
 
-#if !defined(BKTGA_OPTIONAL)
-#   include <boost/optional.hpp>
-#endif
-
 #include <vector>
 #include <array>
 #include <memory>
@@ -73,12 +69,6 @@ namespace bktga {
 //===----------------------------------------------------------------------===//
 #if !defined(BKTGA_STRING_VIEW)
 using string_view = ::boost::string_ref;
-#endif
-
-#if !defined(BKTGA_OPTIONAL)
-template <typename T>
-using optional = ::boost::optional<T>;
-using nullopt_t = ::boost::none_t;
 #endif
 
 using decode_t = std::vector<uint32_t>;
@@ -691,14 +681,58 @@ private:
 //===----------------------------------------------------------------------===//
 //                              API Types
 //===----------------------------------------------------------------------===//
+struct status_t {
+    enum class category {
+        success, info, fail
+    };
+
+    template <size_t N>
+    constexpr status_t(char const (&message)[N], category const c) noexcept
+      : msg {message}, len {N}, cat {c}
+    {
+    }
+
+    char const* msg;
+    size_t      len;
+    category    cat;
+};
+
+inline constexpr bool operator==(status_t const lhs, status_t const rhs) noexcept {
+    return lhs.msg == rhs.msg;
+}
+
+inline constexpr bool operator!=(status_t const lhs, status_t const rhs) noexcept {
+    return lhs.msg != rhs.msg;
+}
+
+namespace status {
+constexpr status_t success {"Success", status_t::category::success};
+} //namespace bktga::status
+
 /// The result of a call to detect.
 template <typename Source>
-struct detect_result_t {
-    string_view              result;
-    Source                   source;
-    optional<tga_descriptor> tga;
+class detect_result_t {
+public:
+    explicit detect_result_t(Source&& src)
+      : detect_result_t {tga_descriptor {src}, std::move(src)}
+    {
+    }
 
-    explicit operator bool() const noexcept { return !!tga; }
+    explicit operator bool() const noexcept {
+        return status.cat != status_t::category::fail;
+    }
+
+    status_t       status;
+    tga_descriptor tga;
+    Source         source;
+private:
+    detect_result_t(tga_descriptor&& tga_data, Source&& src)
+      : status {bktga::status::success}
+      , source {std::move(src)}
+      , tga    {std::move(tga_data)}
+    {
+    }
+
 };
 
 struct read_from_file_t {}; ///< @see detect
@@ -821,15 +855,7 @@ inline decode_t decode(tga_descriptor const& tga, Source& src) {
 
 template <typename Source>
 inline detect_result_t<Source> detect(Source&& source) {
-    detect_result_t<Source> result {
-        "Success", std::move(source), nullptr_t {}};
-
-    result.tga = tga_descriptor(result.source);
-    if (!result.tga->is_valid()) {
-        result.tga = nullopt_t {};
-    }
-
-    return result;
+    return detect_result_t<Source>{std::forward<Source>(source)};
 }
 
 } //namespace bktga::detail
@@ -858,17 +884,17 @@ inline auto detect(Byte const* const beg, Byte const* const end)
 }
 
 template <typename Byte, size_t N>
-inline auto detect(std::array<Byte, N> const& data)
-    -> detect_result_t<detail::memory_source>
-{
-    return detect(data.data(), data.data() + N);
-}
-
-template <typename Byte, size_t N>
 inline auto detect(Byte const (&data)[N])
     -> detect_result_t<detail::memory_source>
 {
     return detect(data + 0, data + N);
+}
+
+template <typename Byte, size_t N>
+inline auto detect(std::array<Byte, N> const& data)
+    -> detect_result_t<detail::memory_source>
+{
+    return detect(data.data(), data.data() + N);
 }
 
 //===----------------------------------------------------------------------===//
@@ -876,7 +902,7 @@ inline auto detect(Byte const (&data)[N])
 //===----------------------------------------------------------------------===//
 template <typename Source>
 inline decode_t decode(detect_result_t<Source>& in) {
-    return in ? detail::decode(*in.tga, in.source)
+    return in ? detail::decode(in.tga, in.source)
               : decode_t {};
 }
 

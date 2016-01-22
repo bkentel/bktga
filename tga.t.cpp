@@ -40,7 +40,9 @@ TEST_CASE("detect", "[tga]") {
 
     auto const check = [](auto const& result) {
         REQUIRE(result);
-        auto const& tga = *result.tga;
+        auto const& tga = result.tga;
+
+        REQUIRE(result.status == bktga::status::success);
 
         REQUIRE(tga.id_length   == 0);
         REQUIRE(tga.cmap_type   == bktga::tga_color_map_type::present);
@@ -131,12 +133,12 @@ TEST_CASE("fields", "[io]") {
 }
 
 TEST_CASE("api", "[api]") {
-    auto result = bktga::detect(bktga::read_from_file, "8-bit-rle.tga");
-    REQUIRE(!!result);
+    auto tga = bktga::detect(bktga::read_from_file, "8-bit-rle.tga");
+    if (!tga) {
+        REQUIRE(false);
+    }
 
-    auto const& tga = *result.tga;
-
-    auto const decoded = bktga::decode(result);
+    auto const decoded = bktga::decode(tga);
 
     FILE* handle {};
     if (auto const ecode = fopen_s(&handle, "out.raw", "wb")) {
