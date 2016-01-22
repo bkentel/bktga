@@ -5,7 +5,6 @@
 #   pragma warning(disable : 4571)
 #   pragma warning(disable : 4625)
 #   pragma warning(disable : 4626)
-#   pragma warning(disable : 4820)
 #   pragma warning(disable : 5026)
 #   pragma warning(disable : 5027)
 #elif defined(__clang__)
@@ -13,642 +12,206 @@
 #   pragma clang diagnostic ignored "-Wexit-time-destructors"
 #   pragma clang diagnostic ignored "-Wmissing-braces"
 #endif
-#define CATCH_CPP11_OR_GREATER
-#define CATCH_CONFIG_CPP11_NOEXCEPT
-#define CATCH_CONFIG_MAIN
+
+#if _MSC_FULL_VER >= 190023506
+#   define CATCH_CONFIG_CPP11_NULLPTR
+#   define CATCH_CONFIG_CPP11_NOEXCEPT
+#   define CATCH_CONFIG_CPP11_GENERATED_METHODS
+#   define CATCH_CONFIG_CPP11_IS_ENUM
+#   define CATCH_CONFIG_CPP11_TUPLE
+#   define CATCH_CONFIG_CPP11_LONG_LONG
+#   define CATCH_CONFIG_CPP11_OVERRIDE
+#   define CATCH_CONFIG_CPP11_UNIQUE_PTR
+#   define CATCH_CONFIG_CPP11_OR_GREATER
+#   define CATCH_CONFIG_VARIADIC_MACROS
+#endif
 #include <Catch/catch.hpp>
 
-#include <iostream>
-#include <string>
-#include <sstream>
-#include <iterator>
+#include <algorithm>
 
-TEST_CASE("static", "[bktga]") {
+namespace detail = bktga::detail;
+
+TEST_CASE("header", "[tga]") {
+    constexpr std::array<uint8_t, 18> mem_data {
+        0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
+      , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
+    };
+
+    auto const result = bktga::detect(mem_data);
+    REQUIRE(result);
+    auto const& tga = *result.tga;
+
+    REQUIRE(tga.id_length   == 0);
+    REQUIRE(tga.cmap_type   == bktga::tga_color_map_type::present);
+    REQUIRE(tga.img_type    == bktga::tga_image_type::rle_color_mapped);
+    REQUIRE(tga.cmap_start  == 0);
+    REQUIRE(tga.cmap_len    == 256);
+    REQUIRE(tga.cmap_depth  == 24);
+    REQUIRE(tga.x_offset    == 0);
+    REQUIRE(tga.y_offset    == 0);
+    REQUIRE(tga.width       == 756);
+    REQUIRE(tga.height      == 512);
+    REQUIRE(tga.pixel_depth == 8);
+
+    REQUIRE(tga.image_desc.attribute_bits() == 0);
+    REQUIRE(tga.image_desc.interleave()     == bktga::tga_interleave::none);
+    REQUIRE(tga.image_desc.origin()         == bktga::tga_origin::lo_left);
+}
+
+TEST_CASE("fields", "[io]") {
     namespace detail = bktga::detail;
+    using detail::static_field_t;
+    using detail::variable_field_t;
+    using detail::read_field;
 
-    static_assert(std::is_same<void,     detail::uint_t<0>>::value, "");
-    static_assert(std::is_same<uint8_t,  detail::uint_t<1>>::value, "");
-    static_assert(std::is_same<uint16_t, detail::uint_t<2>>::value, "");
-    static_assert(std::is_same<uint32_t, detail::uint_t<3>>::value, "");
-    static_assert(std::is_same<uint32_t, detail::uint_t<4>>::value, "");
-    static_assert(std::is_same<uint64_t, detail::uint_t<5>>::value, "");
-    static_assert(std::is_same<uint64_t, detail::uint_t<6>>::value, "");
-    static_assert(std::is_same<uint64_t, detail::uint_t<7>>::value, "");
-    static_assert(std::is_same<uint64_t, detail::uint_t<8>>::value, "");
-    static_assert(std::is_same<void,     detail::uint_t<9>>::value, "");
-
-    static_assert(detail::round_up_bits_to_bytes(0) == 0, "");
-    static_assert(detail::round_up_bits_to_bytes(1) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(2) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(3) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(4) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(5) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(6) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(7) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(8) == 1, "");
-    static_assert(detail::round_up_bits_to_bytes(9) == 2, "");
-
-    static_assert(detail::round_up_bits_to_bytes(-1) == 0, "");
-
-    constexpr auto imax = std::numeric_limits<intmax_t>::max();
-    constexpr auto umax = std::numeric_limits<uintmax_t>::max();
-
-    static_assert(detail::round_up_bits_to_bytes(imax)
-               == detail::round_up_bits_to_bytes(static_cast<uintmax_t>(imax)), "");
-
-    static_assert(detail::round_up_bits_to_bytes(std::numeric_limits<uintmax_t>::max()) == 0, "");
-}
-
-namespace {
-template <typename T, typename U>
-bool test_int_types(U const value, std::array<uint32_t, 5> const& expected) {
-    using bktga::detail::to_rgba;
-
-    auto const n = static_cast<T>(
-        static_cast<std::make_unsigned_t<U>>(value)
-      & static_cast<std::make_unsigned_t<T>>(~0));
-
-    return (to_rgba< 8>(n) == expected[0])
-        && (to_rgba<15>(n) == expected[1])
-        && (to_rgba<16>(n) == expected[2])
-        && (to_rgba<24>(n) == expected[3])
-        && (to_rgba<32>(n) == expected[4]);
-}
-
-template <typename U, typename... Ts>
-bool test_int_types(std::tuple<Ts...>, U const value, std::array<uint32_t, 5> const& expected) {
-    bool const results[] = {true, test_int_types<Ts>(value, expected)...};
-    return std::all_of(std::begin(results), std::end(results), [](auto a) { return !!a;} );
-}
-
-} //namespace
-
-TEST_CASE("detail::to_rgba", "[detail]") {
-    using t1 = std::tuple<
-        char, wchar_t
-      , int8_t,  int16_t,  int32_t,  int64_t
-      , uint8_t, uint16_t, uint32_t, uint64_t>;
-
-    using array_t = std::array<uint32_t, 5> const;
-
-    // tga colors are stored in the file as
-    // BB GG RR AA -> 0xAARRGGBB
-
-    REQUIRE(test_int_types(t1 {}, 0, array_t {
-        0xFF000000
-      , 0xFF000000
-      , 0x00000000
-      , 0xFF000000
-      , 0x00000000}));
-
-    REQUIRE(test_int_types(t1 {}, 0xFF, array_t {
-        0xFFFFFFFF
-      , 0xFF0039FF
-      , 0x000039FF
-      , 0xFFFF0000
-      , 0x00FF0000}));
-
-    REQUIRE(test_int_types(t1 {}, 0x1F, array_t {
-        0xFF1F1F1F
-      , 0xFF0000FF
-      , 0x000000FF
-      , 0xFF1F0000
-      , 0x001F0000}));
-
-    using t2 = std::tuple<
-        wchar_t
-      , int16_t,  int32_t,  int64_t
-      , uint16_t, uint32_t, uint64_t>;
-
-    REQUIRE(test_int_types(t2 {}, 0xFFFF, array_t {
-        0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFF00
-      , 0x00FFFF00}));
-
-    REQUIRE(test_int_types(t2 {}, 0x7FFF, array_t {
-        0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0x00FFFFFF
-      , 0xFFFF7F00
-      , 0x00FF7F00}));
-
-    REQUIRE(test_int_types(t2 {}, 0x0421, array_t {
-        0xFF212121
-      , 0xFF080808
-      , 0x00080808
-      , 0xFF210400
-      , 0x00210400}));
-
-    REQUIRE(test_int_types(t2 {}, 0x8421, array_t {
-        0xFF212121
-      , 0xFF080808
-      , 0xFF080808
-      , 0xFF218400
-      , 0x00218400}));
-
-    using t4 = std::conditional_t<sizeof(wchar_t) >= 4
-      , std::tuple<wchar_t, int32_t,  int64_t, uint32_t, uint64_t>
-      , std::tuple<int32_t, int64_t, uint32_t, uint64_t>>;
-
-    REQUIRE(test_int_types(t4 {}, 0xFFFFFFFF, array_t {
-        0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF}));
-
-    REQUIRE(test_int_types(t4 {}, 0x00FFFFFF, array_t {
-        0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0x00FFFFFF}));
-
-    REQUIRE(test_int_types(t4 {}, 0x7FFFFFFF, array_t {
-        0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0xFFFFFFFF
-      , 0x7FFFFFFF}));
-}
-
-namespace {
-
-template <typename T, typename It>
-struct read_n_bytes_checker {
-    It const beg;
-    It const end;
-
-    template <size_t N>
-    bool apply(T const value, char const next) const {
-        auto const r = bktga::detail::read_n_bytes<N>(beg, end);
-        return std::get<0>(r) == value && *std::get<1>(r) == next;
-    }
-};
-
-} //namespace
-
-TEST_CASE("detail::read_n_bytes", "[detail]") {
-    constexpr char data[] =
-        "\x11\x22\x33\x44\x55\x66\x77\x88\x99\xAA\xBB\xCC\xDD\xEE\xFF";
-
-    // pre gcc5 libstdc++ is broken w.r.t moving / swapping streams.
-    std::istringstream in {
-        std::string {
-            std::begin(data), std::end(data)}
-      , std::ios::binary};
-
-    using iterator_t = std::istreambuf_iterator<char>;
-    iterator_t const beg {in};
-    iterator_t const end {};
-
-    SECTION("read_n_bytes uint8_t") {
-        auto const check = read_n_bytes_checker<uint8_t, iterator_t> {beg, end};
-
-        //REQUIRE(check.apply<0>(0x00u, data[0]));
-        REQUIRE(check.apply<1>(0x11u, data[1]));
-    }
-
-    SECTION("read_n_bytes uint16_t") {
-        auto const check = read_n_bytes_checker<uint16_t, iterator_t> {beg, end};
-
-        //REQUIRE(check.apply<0>(0x0000u, data[0]));
-        REQUIRE(check.apply<1>(0x0011u, data[1]));
-        REQUIRE(check.apply<2>(0x3322u, data[3]));
-    }
-
-    SECTION("read_n_bytes uint32_t") {
-        auto const check = read_n_bytes_checker<uint32_t, iterator_t> {beg, end};
-
-        //REQUIRE(check.apply<0>(0x00000000u, data[0]));
-        REQUIRE(check.apply<1>(0x00000011u, data[1]));
-        REQUIRE(check.apply<2>(0x00003322u, data[3]));
-        REQUIRE(check.apply<3>(0x00665544u, data[6]));
-        REQUIRE(check.apply<4>(0xAA998877u, data[10]));
-    }
-}
-
-namespace {
-
-struct read_n_bits_checker {
-    std::istringstream in;
-
-    template <typename T>
-    explicit read_n_bits_checker(T const& source)
-      : in {std::string {std::begin(source), std::end(source)}
-          , std::ios::binary}
-    {
-    }
-
-    template <size_t N, typename T>
-    bool apply(T const value, char const next) {
-        in.seekg(0, std::ios::beg);
-
-        auto const beg = std::istreambuf_iterator<char> {in};
-        auto const end = std::istreambuf_iterator<char> {};
-
-        auto const r = bktga::detail::read_n_bits<N>(beg, end);
-        auto const t0 = std::get<0>(r);
-
-        static_assert(std::is_same<T, std::remove_cv_t<decltype(t0)>>::value, "");
-
-        return t0 == value && *std::get<1>(r) == next;
-    }
-};
-
-template <typename T0>
-uint8_t make_int(T0 const b0) noexcept {
-    return static_cast<uint8_t>(b0);
-}
-
-template <typename T0, typename T1>
-uint16_t make_int(T0 const b0, T1 const b1) noexcept {
-    return static_cast<uint16_t>(
-        static_cast<uint8_t>(b0)
-      | static_cast<uint8_t>(b1) << 8);
-}
-
-template <typename T0, typename T1, typename T2, typename T3 = T0>
-uint32_t make_int(T0 const b0, T1 const b1, T2 const b2, T3 const b3 = 0) noexcept {
-    return static_cast<uint32_t>(
-        static_cast<uint8_t>(b0)
-      | static_cast<uint8_t>(b1) << 8
-      | static_cast<uint8_t>(b2) << 16
-      | static_cast<uint8_t>(b3) << 24);
-}
-
-} //namespace
-
-TEST_CASE("detail::read_n_bits", "[detail]") {
-    std::array<char, 5> const data {
-        static_cast<char>(0b0101'0101u)
-      , static_cast<char>(0b1010'1010u)
-      , static_cast<char>(0b1100'1100u)
-      , static_cast<char>(0b0011'0011u)
-      , static_cast<char>(0b1111'1111u)
+    constexpr std::array<char, 18> mem_data {
+        0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
+      , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
     };
 
-    // pre gcc5 libstdc++ is broken w.r.t moving / swapping streams.
-    read_n_bits_checker check {data};
+    detail::memory_source src_mem  {mem_data};
+    detail::file_source   src_file {"8-bit-rle.tga"};
 
-    REQUIRE(check.apply< 1>(make_int(0b0000'0001), data[1]));
-    REQUIRE(check.apply< 2>(make_int(0b0000'0001), data[1]));
-    REQUIRE(check.apply< 3>(make_int(0b0000'0101), data[1]));
-    REQUIRE(check.apply< 4>(make_int(0b0000'0101), data[1]));
-    REQUIRE(check.apply< 5>(make_int(0b0001'0101), data[1]));
-    REQUIRE(check.apply< 6>(make_int(0b0001'0101), data[1]));
-    REQUIRE(check.apply< 7>(make_int(0b0101'0101), data[1]));
-    REQUIRE(check.apply< 8>(make_int(0b0101'0101), data[1]));
+    SECTION("static fields") {
+        constexpr auto field_8a_t  = static_field_t<char>          {};
+        constexpr auto field_8b_t  = static_field_t<signed char>   {};
+        constexpr auto field_8c_t  = static_field_t<unsigned char> {};
+        constexpr auto field_16a_t = static_field_t<int16_t,  1>   {};
+        constexpr auto field_16b_t = static_field_t<uint16_t, 1>   {};
+        constexpr auto field_32a_t = static_field_t<int32_t,  4>   {};
+        constexpr auto field_32b_t = static_field_t<uint32_t, 4>   {};
+        constexpr auto field_64a_t = static_field_t<int64_t,  0>   {};
+        constexpr auto field_64b_t = static_field_t<uint64_t, 0>   {};
 
-    auto const n16 = [b0 = data[0]](auto const b1) {
-        return make_int(b0, b1);
-    };
+        constexpr auto field_array_t = static_field_t<decltype(mem_data)> {};
 
-    REQUIRE(check.apply< 9>(n16(0b0000'0000), data[2]));
-    REQUIRE(check.apply<10>(n16(0b0000'0010), data[2]));
-    REQUIRE(check.apply<11>(n16(0b0000'0010), data[2]));
-    REQUIRE(check.apply<12>(n16(0b0000'1010), data[2]));
-    REQUIRE(check.apply<13>(n16(0b0000'1010), data[2]));
-    REQUIRE(check.apply<14>(n16(0b0010'1010), data[2]));
-    REQUIRE(check.apply<15>(n16(0b0010'1010), data[2]));
-    REQUIRE(check.apply<16>(n16(0b1010'1010), data[2]));
+        auto const check = [&](auto& src) {
+            REQUIRE(read_field(field_8a_t,  src) == 0x00);
+            REQUIRE(read_field(field_8b_t,  src) == 0x00);
+            REQUIRE(read_field(field_8c_t,  src) == 0x00);
+            REQUIRE(read_field(field_16a_t, src) == 0x09'01);
+            REQUIRE(read_field(field_16b_t, src) == 0x09'01);
+            REQUIRE(read_field(field_32a_t, src) == 0x18'01'00'00);
+            REQUIRE(read_field(field_32b_t, src) == 0x18'01'00'00);
+            REQUIRE(read_field(field_64a_t, src) == 0x18'01'00'00'00'09'01'00ll);
+            REQUIRE(read_field(field_64b_t, src) == 0x18'01'00'00'00'09'01'00ull);
 
-    auto const n24 = [b0 = data[0], b1 = data[1]](auto const b2) {
-        return make_int(b0, b1, b2);
-    };
-
-    REQUIRE(check.apply<17>(n24(0b0000'0000), data[3]));
-    REQUIRE(check.apply<18>(n24(0b0000'0000), data[3]));
-    REQUIRE(check.apply<19>(n24(0b0000'0100), data[3]));
-    REQUIRE(check.apply<20>(n24(0b0000'1100), data[3]));
-    REQUIRE(check.apply<21>(n24(0b0000'1100), data[3]));
-    REQUIRE(check.apply<22>(n24(0b0000'1100), data[3]));
-    REQUIRE(check.apply<23>(n24(0b0100'1100), data[3]));
-    REQUIRE(check.apply<24>(n24(0b1100'1100), data[3]));
-
-    auto const n32 = [b0 = data[0], b1 = data[1], b2 = data[2]](auto const b3) {
-        return make_int(b0, b1, b2, b3);
-    };
-
-    REQUIRE(check.apply<25>(n32(0b0000'0001), data[4]));
-    REQUIRE(check.apply<26>(n32(0b0000'0011), data[4]));
-    REQUIRE(check.apply<27>(n32(0b0000'0011), data[4]));
-    REQUIRE(check.apply<28>(n32(0b0000'0011), data[4]));
-    REQUIRE(check.apply<29>(n32(0b0001'0011), data[4]));
-    REQUIRE(check.apply<30>(n32(0b0011'0011), data[4]));
-    REQUIRE(check.apply<31>(n32(0b0011'0011), data[4]));
-    REQUIRE(check.apply<32>(n32(0b0011'0011), data[4]));
-}
-
-TEST_CASE("detail::flip", "[detail]") {
-    constexpr std::array<int, 16> original {
-        0, 2, 2, 2
-      , 1, 0, 2, 2
-      , 1, 1, 0, 2
-      , 1, 1, 1, 0
-    };
-
-    auto data = original;
-
-    SECTION("horizontal") {
-        bktga::detail::flip_horizontal(data.data(), 4, 4);
-
-        constexpr std::array<int, 16> result {
-            2, 2, 2, 0
-          , 2, 2, 0, 1
-          , 2, 0, 1, 1
-          , 0, 1, 1, 1
+            auto const a = read_field(field_array_t, src);
+            REQUIRE(std::equal(begin(mem_data), end(mem_data), begin(a), end(a)));
         };
 
-        REQUIRE(std::equal(begin(data), end(data), begin(result)));
-
-        bktga::detail::flip_horizontal(data.data(), 4, 4);
-        REQUIRE(std::equal(begin(data), end(data), begin(original)));
+        check(src_mem);
+        check(src_file);
     }
 
-    SECTION("vertical") {
-        bktga::detail::flip_vertical(data.data(), 4, 4);
+    SECTION("variable fields") {
+        auto const check = [&](auto& src) {
+            using std::begin;
+            using std::end;
 
-        constexpr std::array<int, 16> result {
-            1, 1, 1, 0
-          , 1, 1, 0, 2
-          , 1, 0, 2, 2
-          , 0, 2, 2, 2
+            auto const a = read_field(variable_field_t {18, 0}, src);
+            REQUIRE(std::equal(begin(mem_data), end(mem_data), begin(a), end(a)));
         };
 
-        REQUIRE(std::equal(begin(data), end(data), begin(result)));
-
-        bktga::detail::flip_vertical(data.data(), 4, 4);
-        REQUIRE(std::equal(begin(data), end(data), begin(original)));
+        check(src_mem);
+        check(src_file);
     }
 }
 
-TEST_CASE("id and color map", "[bktga]") {
-    constexpr char data[] {
-        "\x05"     //id length - 5
-        "\x01"     //color map
-        "\x01"     //true color
-        "\x10\x00" //color map start  - 16
-        "\x04\x00" //color map length - 4
-        "\x10"     //color map depth  - 16
-        "\x00\x00" //x offset
-        "\x00\x00" //y offset
-        "\x0F\x01" //width
-        "\xF0\x10" //height
-        "\x18"     //pixel depth - 24
-        "\x00"     //image descriptor
+TEST_CASE("api", "[api]") {
+    auto result = bktga::detect(bktga::read_from_file, "8-bit-rle.tga");
+    REQUIRE(!!result);
 
-        // id
-        "abcd\0"
+    auto const& tga = *result.tga;
 
-        // color map
-        "\x10\x00" "\x20\x00" "\x30\x00" "\x40\x00"
+    auto const decoded = bktga::decode(result);
 
-        // footer
-        "\x00\x00\x00\x00"
-        "\x00\x00\x00\x00"
-        "TRUEVISION-XFILE."
-    };
-
-    std::istringstream in {
-        std::string {
-            std::begin(data), std::end(data)}
-      , std::ios::binary};
-
-    auto result = bktga::check_file(in);
-
-    auto const& tga = *result.first;
-
-    constexpr auto expected_id_len    = 5;
-    constexpr auto expected_cmap_size = 4 * 2;
-    constexpr auto expected_data_size = 0x010F * 0x10F0 * 3;
-    constexpr char expected_id[]      = "abcd";
-
-    auto const make_range = [](auto const beg, auto const size) {
-        REQUIRE(beg  >= 0);
-        REQUIRE(size >= 0);
-
-        auto const a = static_cast<ptrdiff_t>(beg);
-        auto const b = static_cast<ptrdiff_t>(size);
-        return bktga::tga_descriptor::range_t {a, a + b};
-    };
-
-    auto const id_range    = make_range(bktga::header_size,      expected_id_len);
-    auto const cmap_range  = make_range(std::get<1>(id_range),   expected_cmap_size);
-    auto const idata_range = make_range(std::get<1>(cmap_range), expected_data_size);
-
-    REQUIRE(tga.id_range()         == id_range);
-    REQUIRE(tga.color_map_range()  == cmap_range);
-    REQUIRE(tga.image_data_range() == idata_range);
-
-    REQUIRE(std::equal(std::begin(tga.id), std::end(tga.id), std::begin(expected_id)));
-
-    bktga::tga_color_map const cmap {tga, in};
-    REQUIRE(cmap.size() == 4u);
-
-    std::array<uint32_t, 4> const expected_cmap {
-        bktga::detail::to_rgba<16>(0x10)
-      , bktga::detail::to_rgba<16>(0x20)
-      , bktga::detail::to_rgba<16>(0x30)
-      , bktga::detail::to_rgba<16>(0x40)
-    };
-
-    REQUIRE(std::equal(std::begin(cmap), std::end(cmap), std::begin(expected_cmap)));
-}
-
-TEST_CASE("check_file", "[bktga]") {
-    SECTION("version 1") {
-        constexpr char data[64] {
-            "\x00"     //id length
-            "\x01"     //color map
-            "\x02"     //true color
-            "\x00\x00" //color map start
-            "\x00\x00" //color map length
-            "\x00"     //color map depth
-            "\x00\x00" //x offset
-            "\x00\x00" //y offset
-            "\x0F\x01" //width
-            "\xF0\x10" //height
-            "\x18"     //pixel depth
-            "\x00"     //image descriptor
-        };
-
-        std::istringstream in {
-            std::string {
-                std::begin(data), std::end(data)}
-          , std::ios::binary};
-
-        auto const result = bktga::check_file(in);
-        REQUIRE(!!result.first);
-        REQUIRE(result.second.empty());
-
-        auto const& tga = *result.first;
-
-        REQUIRE(tga.id_length   == uint8_t {0});
-        REQUIRE(tga.cmap_type   == bktga::tga_color_map_type::present);
-        REQUIRE(tga.img_type    == bktga::tga_image_type::true_color);
-        REQUIRE(tga.cmap_start  == uint16_t {0});
-        REQUIRE(tga.cmap_len    == uint16_t {0});
-        REQUIRE(tga.cmap_depth  == uint8_t {0});
-        REQUIRE(tga.x_offset    == uint16_t {0});
-        REQUIRE(tga.y_offset    == uint16_t {0});
-        REQUIRE(tga.width       == uint16_t {0x010F});
-        REQUIRE(tga.height      == uint16_t {0x10F0});
-        REQUIRE(tga.pixel_depth == uint8_t {0x18});
-        REQUIRE(tga.image_desc  == bktga::tga_image_descriptor {0});
-        REQUIRE(tga.ext_offset  == uint8_t {0});
-        REQUIRE(tga.dev_offset  == uint8_t {0});
-
-        REQUIRE(tga.version == bktga::tga_version::v1);
+    FILE* handle {};
+    if (auto const ecode = fopen_s(&handle, "out.raw", "wb")) {
+        REQUIRE(ecode == 0);
     }
 
-    SECTION("version 2") {
-        constexpr char data[] {
-            "\x00"     //id length
-            "\x01"     //color map
-            "\x02"     //true color
-            "\x00\x00" //color map start
-            "\x00\x00" //color map length
-            "\x00"     //color map depth
-            "\x00\x00" //x offset
-            "\x00\x00" //y offset
-            "\x0F\x01" //width
-            "\xF0\x10" //height
-            "\x18"     //pixel depth
-            "\x00"     //image descriptor
-
-            // footer
-            "\x00\x00\x00\x00"
-            "\x00\x00\x00\x00"
-            "TRUEVISION-XFILE."
-        };
-
-        std::istringstream in {
-            std::string {
-                std::begin(data), std::end(data)}
-          , std::ios::binary};
-
-        auto const result = bktga::check_file(in);
-        REQUIRE(!!result.first);
-        REQUIRE(result.second.empty());
-
-        auto const& tga = *result.first;
-
-        REQUIRE(tga.id_length   == uint8_t {0});
-        REQUIRE(tga.cmap_type   == bktga::tga_color_map_type::present);
-        REQUIRE(tga.img_type    == bktga::tga_image_type::true_color);
-        REQUIRE(tga.cmap_start  == uint16_t {0});
-        REQUIRE(tga.cmap_len    == uint16_t {0});
-        REQUIRE(tga.cmap_depth  == uint8_t {0});
-        REQUIRE(tga.x_offset    == uint16_t {0});
-        REQUIRE(tga.y_offset    == uint16_t {0});
-        REQUIRE(tga.width       == uint16_t {0x010F});
-        REQUIRE(tga.height      == uint16_t {0x10F0});
-        REQUIRE(tga.pixel_depth == uint8_t {0x18});
-        REQUIRE(tga.image_desc  == bktga::tga_image_descriptor {0});
-        REQUIRE(tga.ext_offset  == uint8_t {0});
-        REQUIRE(tga.dev_offset  == uint8_t {0});
-
-        REQUIRE(tga.version == bktga::tga_version::v2);
-    }
+    fwrite(decoded.data(), sizeof(uint32_t), decoded.size(), handle);
+    fclose(handle);
 }
 
-TEST_CASE("file - 4-color", "[file]") {
-    constexpr char filename[] = R"(./test/4-color.tga)";
+//TEST_CASE("memory_source from std::array", "[read]") {
+//    using size = std::integral_constant<ptrdiff_t, 10>;
+//
+//    auto const data = [] {
+//        std::array<char, size::value> out;
+//        std::iota(begin(out), end(out), 1);
+//        return out;
+//    }();
+//
+//    SECTION("check size") {
+//        for (ptrdiff_t i = 0; i < size::value; ++i) {
+//            memory_source s {data, i};
+//            REQUIRE(s.size() == (size::value - i));
+//        }
+//    }
+//
+//    memory_source src {data};
+//
+//    SECTION("read 1 byte") {
+//        for (ptrdiff_t i = 0; i < size::value; ++i) {
+//            char c {};
+//            src.read(1, &c, 1);
+//            REQUIRE(c == (i + 1));
+//        }
+//    }
+//
+//    SECTION("over-read source") {
+//        std::array<char, size::value> out;
+//        src.read(size::value + 1, out.data(), out.size());
+//        REQUIRE(std::equal(begin(out), end(out), begin(data), end(data)));
+//    }
+//
+//    SECTION("over-read dest") {
+//        std::array<char, size::value - 1> out;
+//        src.read(size::value, out.data(), out.size());
+//        REQUIRE(std::equal(begin(out), end(out), begin(data)));
+//    }
+//
+//    SECTION("under-read") {
+//        std::array<char, size::value + 3> out;
+//        src.read(out.size(), out.data(), out.size());
+//        REQUIRE(std::equal(begin(data), end(data), begin(out)));
+//
+//        auto const it = std::find_if_not(begin(out) + size::value, end(out)
+//            , [](auto const n) { return n == 0; });
+//
+//        REQUIRE(it == end(out));
+//    }
+//}
+//
+//TEST_CASE("memory_source from std::vector", "[read]") {
+//    using size = std::integral_constant<ptrdiff_t, 10>;
+//
+//    auto const data = [] {
+//        std::vector<char> out;
+//        out.reserve(size::value);
+//        std::generate_n(std::back_inserter(out), size::value, [i = char {1}]() mutable {
+//            return i++;
+//        });
+//
+//        return out;
+//    }();
+//
+//    for (ptrdiff_t i = 0; i < size::value; ++i) {
+//        memory_source s {data, i};
+//        REQUIRE(s.size() == (size::value - i));
+//    }
+//}
+//
+//TEST_CASE("file_source", "[read]") {
+//    file_source src {"foo.txt"};
+//
+//    std::array<char, 5> out;
+//    src.read(5, out.data(), out.size());
+//
+//}
 
-    auto const result = bktga::check_file(filename);
-    REQUIRE(result.first);
-
-    auto const& tga = *result.first;
-
-    auto const decoded = bktga::decode(
-        tga, std::ifstream {filename, std::ios::binary});
-
-    auto const pixel_at = [&](size_t const x, size_t const y) {
-        auto const w = tga.width;
-        auto const h = tga.height;
-
-        REQUIRE(x < w);
-        REQUIRE(y < h);
-
-        return decoded[y * w + x];
-    };
-
-    REQUIRE(tga.width  == 16);
-    REQUIRE(tga.height == 16);
-    REQUIRE(tga.pixel_depth == 32);
-
-    constexpr std::array<size_t, 4> xs {0x0, 0xF, 0x0, 0xF};
-    constexpr std::array<size_t, 4> ys {0x0, 0x0, 0xF, 0xF};
-
-    REQUIRE(pixel_at(xs[0], ys[0]) == 0xAA'FF'00'00); //top    left  - blue
-    REQUIRE(pixel_at(xs[1], ys[1]) == 0xAA'00'FF'00); //top    right - green
-    REQUIRE(pixel_at(xs[2], ys[2]) == 0xAA'00'00'FF); //bottom left  - red
-    REQUIRE(pixel_at(xs[3], ys[3]) == 0xAA'FF'00'7F); //bottom right - purple
-
-    auto const is_skip_pixel = [&](size_t const x, size_t const y) {
-        for (size_t i = 0; i < xs.size(); ++i) {
-            if (xs[i] == x && ys[i] == y) {
-                return true;
-            }
-        }
-
-        return false;
-    };
-
-    for (size_t yi = 0; yi < tga.height; ++yi) {
-        for (size_t xi = 0; xi < tga.width; ++xi) {
-            if (is_skip_pixel(xi, yi)) {
-                continue;
-            }
-
-            REQUIRE(pixel_at(xi, yi) == 0xAAFFFFFF);
-        }
-    }
-}
-
-TEST_CASE("convert all", "[output]") {
-    constexpr std::array<char const*, 2> filenames {
-        "./test/8-bit-rle.tga"
-      , "./test/4-color.tga"
-    };
-
-    for (auto const filename : filenames) {
-        auto const result = bktga::check_file(filename);
-        REQUIRE(result.first);
-
-        auto const& tga = *result.first;
-        auto const decoded = bktga::decode(
-            tga, std::ifstream {filename, std::ios::binary});
-
-        auto const outname = std::string {filename} + ".out.raw";
-
-        std::ofstream out {outname, std::ios::binary};
-        out.write(reinterpret_cast<char const*>(decoded.data()),
-            static_cast<std::streamsize>(decoded.size() * sizeof(uint32_t)));
-    }
-}
-
-TEST_CASE("example 1", "[example]") {
-    constexpr char filename[] = "./test/8-bit-rle.tga";
-
-    // std::pair<optional, string_view>
-    auto const result = bktga::check_file(filename);
-    if (!result.first) {
-        std::cerr << "Error: " << result.second.to_string() << std::endl;
-        //return 1;
-    }
-
-    // bktga::tga_descriptor
-    auto const& tga = *result.first;
-
-    // std::vector<uint32_t>
-    auto converted = bktga::decode(tga, filename);
-
-    //return 0;
-}
 
 #if defined(_MSC_VER)
 #   pragma warning(pop)
