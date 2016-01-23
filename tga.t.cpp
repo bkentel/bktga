@@ -11,6 +11,9 @@
 #   pragma clang diagnostic push
 #   pragma clang diagnostic ignored "-Wexit-time-destructors"
 #   pragma clang diagnostic ignored "-Wmissing-braces"
+#elif defined __GNUC__
+#   pragma GCC diagnostic push
+#   pragma GCC diagnostic ignored "-Wparentheses"
 #endif
 
 #if _MSC_FULL_VER >= 190023506
@@ -78,7 +81,7 @@ TEST_CASE("fields", "[io]") {
     using detail::variable_field_t;
     using detail::read_field;
 
-    constexpr std::array<char, 18> mem_data {
+    constexpr std::array<uint8_t, 18> mem_data {
         0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
       , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
     };
@@ -140,13 +143,12 @@ TEST_CASE("api", "[api]") {
 
     auto const decoded = bktga::decode(tga);
 
-    FILE* handle {};
-    if (auto const ecode = fopen_s(&handle, "out.raw", "wb")) {
-        REQUIRE(ecode == 0);
-    }
+    auto const handle = std::unique_ptr<FILE, decltype(&fclose)> {
+        fopen("out.raw", "wb"), &fclose
+    };
 
-    fwrite(decoded.data(), sizeof(uint32_t), decoded.size(), handle);
-    fclose(handle);
+    REQUIRE(handle);
+    fwrite(decoded.data(), sizeof(uint32_t), decoded.size(), handle.get());
 }
 
 //TEST_CASE("memory_source from std::array", "[read]") {
@@ -231,4 +233,6 @@ TEST_CASE("api", "[api]") {
 #   pragma warning(pop)
 #elif defined(__clang__)
 #   pragma clang diagnostic pop
+#elif defined __GNUC__
+#   pragma GCC diagnostic pop
 #endif

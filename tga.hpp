@@ -10,31 +10,36 @@
 #
 #   if !defined(_SCL_SECURE_NO_WARNINGS)
 #       define _SCL_SECURE_NO_WARNINGS
-#       define BKTGA_CL_SECURE_NO_WARNINGS
+#       define BKTGA_SCL_SECURE_NO_WARNINGS
+#   endif
+#
+#   if !defined(_CRT_SECURE_NO_WARNINGS)
+#       define _CRT_SECURE_NO_WARNINGS
+#       define BKTGA_CRT_SECURE_NO_WARNINGS
 #   endif
 #endif
 
-#include <boost/predef.h>
+#include <boost/predef/other/endian.h>
 
-// BKTGA_STRING_VIEW The implementation to use for string_view; defaults to boost::string_ref
-// BKTGA_OPTIONAL    The implementation to use for optional<T>; defaults to boost::optional<T>
+// BKTGA_STRING_VIEW      The implementation to use for string_view; defaults to boost::string_ref
+// BKTGA_ASSERT_IMPL      The function to use for standard assertions.
+// BKTGA_ASSERT_SAFE_IMPL The function to use for "safe mode" only assertions.
+// BKTGA_ASSERT_OPT_IMPL  The function to use for -always- assertions.
 
 #if !defined(BKTGA_STRING_VIEW)
 #   include <boost/utility/string_ref.hpp>
 #endif
 
-#include <vector>
-#include <array>
-#include <memory>
-#include <algorithm>
-#include <type_traits>
+#include <algorithm>                         // for forward
+#include <array>                             // for array
+#include <iterator>                          // for back_inserter
+#include <memory>                            // for unique_ptr
+#include <type_traits>                       // for conditional_t, etc
+#include <vector>                            // for vector
 
-#include <cstddef>
-#include <cstdint>
-
-// BKTGA_ASSERT_IMPL      The function to use for standard assertions.
-// BKTGA_ASSERT_SAFE_IMPL The function to use for "safe mode" only assertions.
-// BKTGA_ASSERT_OPT_IMPL  The function to use for -always- assertions.
+#include <cerrno>                            // for errno
+#include <cstdint>                           // for uint32_t, uint8_t, etc
+#include <cstdio>                            // for fclose, FILE, fseek, etc
 
 #if !defined(BKTGA_ASSERT_IMPL)
 #   include <cassert>
@@ -157,7 +162,7 @@ inline constexpr T little_endian_to_host(T const n) noexcept {
 }
 
 template <ptrdiff_t Bpp>
-uint32_t to_rgba(uint32_t n) = delete;
+uint32_t to_rgba(uint32_t n) noexcept;
 
 template <> inline constexpr uint32_t to_rgba<32>(uint32_t const n) noexcept {
     // n      -> 0xAARRGGBB
@@ -209,6 +214,7 @@ template <> inline constexpr uint32_t to_rgba<8>(uint32_t const n) noexcept {
          | ((n & 0xFF) <<  8)  // green
          | ((n & 0xFF) << 16); // blue
 }
+
 #else
 #   error not implemented
 #endif
@@ -270,12 +276,14 @@ private:
     using handle_t = std::unique_ptr<FILE, decltype(&std::fclose)>;
 
     static handle_t do_open_(char const* const fname) noexcept {
-        FILE* handle {};
-        if (auto result = fopen_s(&handle, fname, "rb")) {
-            return {nullptr, std::fclose};
+        if (auto const handle = fopen(fname, "rb")) {
+            return {handle, std::fclose};
         }
 
-        return {handle, std::fclose};
+        //TODO
+        auto const ecode = errno;
+
+        return {nullptr, std::fclose};
     }
 
     operator FILE*() const noexcept { return handle_.get(); }
@@ -662,8 +670,8 @@ struct tga_color_map {
     }
 
     uint32_t operator[](ptrdiff_t const i) const noexcept {
-        auto const j    = i - first_;
         auto const size = static_cast<ptrdiff_t>(data_.size());
+        auto const j    = i - first_;
         return (j < size && j >= 0) ? data_[static_cast<size_t>(j)] : 0;
     }
 private:
@@ -728,8 +736,8 @@ public:
 private:
     detect_result_t(tga_descriptor&& tga_data, Source&& src)
       : status {bktga::status::success}
-      , source {std::move(src)}
       , tga    {std::move(tga_data)}
+      , source {std::move(src)}
     {
     }
 
@@ -737,7 +745,7 @@ private:
 
 struct read_from_file_t {}; ///< @see detect
 
-constexpr read_from_file_t read_from_file;
+constexpr read_from_file_t read_from_file {};
 
 //===----------------------------------------------------------------------===//
 //                              API Implementation
@@ -829,7 +837,7 @@ inline decode_t decode(tga_descriptor const& tga, Source& src) {
     return tga.uses_color_map()
       ? decode<Bpp>(tga, src
           , [m = tga_color_map(tga, src)](auto const c) noexcept -> uint32_t {
-                return m[c];
+                return m[static_cast<ptrdiff_t>(c)];
             })
       : decode<Bpp>(tga, src
           , [](auto const c) noexcept -> uint32_t {
@@ -911,8 +919,12 @@ inline decode_t decode(detect_result_t<Source>& in) {
 #if defined(_MSC_VER)
 #   pragma warning(pop)
 #
-#   if defined(BKTGA_CL_SECURE_NO_WARNINGS)
+#   if defined(BKTGA_SCL_SECURE_NO_WARNINGS)
 #       undef BKTGA_CL_SECURE_NO_WARNINGS
 #       undef _SCL_SECURE_NO_WARNINGS
+#   endif
+#   if defined(BKTGA_CRT_SECURE_NO_WARNINGS)
+#       undef BKTGA_CRT_SECURE_NO_WARNINGS
+#       undef _CRT_SECURE_NO_WARNINGS
 #   endif
 #endif
