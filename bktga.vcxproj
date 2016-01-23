@@ -106,7 +106,7 @@
       <SmallerTypeCheck>true</SmallerTypeCheck>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
-      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0;_HAS_AUTO_PTR_ETC=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -122,7 +122,7 @@
       <SmallerTypeCheck>true</SmallerTypeCheck>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
-      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0;_HAS_AUTO_PTR_ETC=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -139,7 +139,7 @@
       <DisableSpecificWarnings>4710;4514;4371;4626;4820;4668</DisableSpecificWarnings>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
-      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0;_HAS_AUTO_PTR_ETC=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -158,7 +158,7 @@
       <DisableSpecificWarnings>4710;4514;4371;4626;4820;4668</DisableSpecificWarnings>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
-      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0;_HAS_AUTO_PTR_ETC=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -170,6 +170,7 @@
     <ClInclude Include="tga.hpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="main.cpp" />
     <ClCompile Include="tga.cpp" />
     <ClCompile Include="tga.t.cpp" />
   </ItemGroup>
