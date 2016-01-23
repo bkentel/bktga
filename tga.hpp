@@ -150,6 +150,8 @@ inline constexpr T min_0(T const a, T const b, T const c) noexcept {
 //===----------------------------------------------------------------------===//
 //                              I/O Functions
 //===----------------------------------------------------------------------===//
+using unique_file = std::unique_ptr<FILE, decltype(&fclose)>;
+
 namespace detail {
 /// Convert a little endian integer to a host integer of at least the same size.
 #if defined(BOOST_ENDIAN_LITTLE_BYTE_AVAILABLE)
@@ -220,19 +222,15 @@ template <> inline constexpr uint32_t to_rgba<8>(uint32_t const n) noexcept {
 /// filesystem data source
 class file_source {
 public:
-    file_source(
-        char const* const fname
-      , ptrdiff_t   const first
-      , ptrdiff_t   const last
-    )
-      : first_  {first}
-      , last_   {last}
-      , handle_ {do_open_(fname)}
+    explicit file_source(string_view const fname)
+      : file_source {do_open_(fname.to_string().c_str())}
     {
     }
 
-    explicit file_source(string_view const fname)
-      : file_source {fname.to_string().c_str(), 0, 0}
+    explicit file_source(unique_file file)
+      : first_  {0}
+      , last_   {0}
+      , handle_ {std::move(file)}
     {
     }
 
@@ -271,9 +269,7 @@ public:
         std::fseek(*this, static_cast<long>(offset), SEEK_SET);
     }
 private:
-    using handle_t = std::unique_ptr<FILE, decltype(&std::fclose)>;
-
-    static handle_t do_open_(char const* const fname) noexcept {
+    static unique_file do_open_(char const* const fname) noexcept {
         if (auto const handle = fopen(fname, "rb")) {
             return {handle, std::fclose};
         }
@@ -286,9 +282,9 @@ private:
 
     operator FILE*() const noexcept { return handle_.get(); }
 
-    ptrdiff_t first_;
-    ptrdiff_t last_;
-    handle_t  handle_;
+    ptrdiff_t   first_;
+    ptrdiff_t   last_;
+    unique_file handle_;
 };
 
 /// in-memory data source
@@ -616,7 +612,7 @@ public:
     tga_version              version     {tga_version::invalid};
 private:
     template <typename Source>
-    tga_descriptor(Source& src, ptrdiff_t const size)
+    tga_descriptor(Source& src, ptrdiff_t const fsize)
       : id_length   {detail::read_field(field::id_length   {}, src)}
       , cmap_type   {detail::read_field(field::cmap_type   {}, src)}
       , img_type    {detail::read_field(field::img_type    {}, src)}
@@ -629,10 +625,10 @@ private:
       , height      {detail::read_field(field::height      {}, src)}
       , pixel_depth {detail::read_field(field::pixel_depth {}, src)}
       , image_desc  {detail::read_field(field::image_desc  {}, src)}
-      , ext_offset  {detail::read_field(field::ext_offset  {}, src, size - tga_footer_size)}
-      , dev_offset  {detail::read_field(field::dev_offset  {}, src, size - tga_footer_size)}
-      , signature   {detail::read_field(field::signature   {}, src, size - tga_footer_size)}
-      , size        {size}
+      , ext_offset  {detail::read_field(field::ext_offset  {}, src, fsize - tga_footer_size)}
+      , dev_offset  {detail::read_field(field::dev_offset  {}, src, fsize - tga_footer_size)}
+      , signature   {detail::read_field(field::signature   {}, src, fsize - tga_footer_size)}
+      , size        {fsize}
       , version     {tga_version::v1}
     {
     }
@@ -871,6 +867,12 @@ inline detect_result_t<Source> detect(Source&& source) {
 //===----------------------------------------------------------------------===//
 //                              API - detect
 //===----------------------------------------------------------------------===//
+inline auto detect(unique_file file)
+    -> detect_result_t<detail::file_source>
+{
+    return detail::detect(detail::file_source {std::move(file)});
+}
+
 inline auto detect(read_from_file_t, string_view const filename)
     -> detect_result_t<detail::file_source>
 {
@@ -898,11 +900,11 @@ inline auto detect(Byte const (&data)[N])
     return detect(data + 0, data + N);
 }
 
-template <typename Byte, size_t N>
-inline auto detect(std::array<Byte, N> const& data)
+template <typename Container>
+inline auto detect(Container const& c)
     -> detect_result_t<detail::memory_source>
 {
-    return detect(data.data(), data.data() + N);
+    return detect(c.data(), c.data() + c.size());
 }
 
 //===----------------------------------------------------------------------===//

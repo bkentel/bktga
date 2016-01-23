@@ -27,7 +27,7 @@ endif
 ifeq ($(findstring clang,$(CXX)),clang)
     CLANG_VERSION=$(shell $(CXX) -v 2>&1 | grep -oP "clang version ..." | sed "s/clang version //")
 
-    WARN = -Weverything -Wno-c++98-compat -Wno-c++98-c++11-compat-pedantic -Wno-padded
+    WARN = -Weverything -Wno-c++98-compat -Wno-c++98-compat-pedantic -Wno-c++98-c++11-compat-pedantic -Wno-padded
 
     ifdef SANITIZE
         SANITIZE += -fsanitize-blacklist=./CI/blacklist.txt -fno-omit-frame-pointer

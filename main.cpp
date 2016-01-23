@@ -8,7 +8,7 @@
 #   pragma warning(disable : 5027)
 #endif
 
-#if _MSC_FULL_VER >= 190023506
+#if defined(_MSC_VER) && _MSC_FULL_VER >= 190023506
 #   define CATCH_CONFIG_CPP11_NULLPTR
 #   define CATCH_CONFIG_CPP11_NOEXCEPT
 #   define CATCH_CONFIG_CPP11_GENERATED_METHODS
