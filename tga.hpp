@@ -174,7 +174,7 @@ inline constexpr T const* data(std::initializer_list<T> ilist) noexcept {
     return ilist.begin();
 }
 
-/// c++17 enabled size()
+/// c++17 std::size()
 template <typename T, size_t Size>
 inline constexpr size_t size(T (&)[Size]) noexcept {
     return Size;
