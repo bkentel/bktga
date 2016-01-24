@@ -87,8 +87,12 @@ TEST_CASE("buffer", "[utility]") {
     auto const check = [](auto const size) {
         buffer const b {size};
         REQUIRE(b.size()  == static_cast<ptrdiff_t>(size));
-        REQUIRE(b.begin() == b.data());
-        REQUIRE(b.end()   == (b.data() + size));
+
+        REQUIRE(reinterpret_cast<std::uintptr_t>(b.begin())
+             == reinterpret_cast<std::uintptr_t>(b.data()));
+
+        REQUIRE(reinterpret_cast<std::uintptr_t>(b.end())
+             == reinterpret_cast<std::uintptr_t>(b.data() + size));
     };
 
     check(100);
