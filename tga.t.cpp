@@ -45,6 +45,25 @@ std::array<const char*, 2> const test_files {
   , test_file_4_color
 };
 
+template <typename Container>
+bktga::unique_file fill_temp_file(Container const& c) noexcept {
+    using std::begin;
+    using std::end;
+    using std::data;
+    using std::size;
+
+    auto temp_file = bktga::unique_file {std::tmpfile(), fclose};
+    REQUIRE(temp_file);
+
+    using value_t = std::decay_t<decltype(*begin(c))>;
+    static_assert(std::is_pod<value_t> {}, "");
+
+    fwrite(data(c), sizeof(value_t), size(c), temp_file.get());
+    fseek(temp_file.get(), 0, SEEK_SET);
+
+    return temp_file;
+}
+
 }
 
 TEST_CASE("round_up_bits_to_bytes", "[utility]") {
@@ -93,6 +112,127 @@ TEST_CASE("min_0", "[utility]") {
 
     REQUIRE(min_0(-1, -1, -1) == 0);
     REQUIRE(min_0(-1,  1,  2) == 0);
+}
+
+TEST_CASE("little_endian_to_host", "[io]") {
+    using bktga::detail::little_endian_to_host;
+
+    auto const check = [](auto const n) noexcept {
+        alignas (uint64_t) constexpr char const data[] {
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x7F
+        };
+
+        auto const m = little_endian_to_host(
+            *reinterpret_cast<decltype(n) const*>(data));
+
+        REQUIRE(m == n);
+    };
+
+    check(char     {0x11});
+    check(int8_t   {0x11});
+    check(int16_t  {0x2211});
+    check(int32_t  {0x44332211});
+    check(int64_t  {0x7F77665544332211});
+    check(uint8_t  {0x11});
+    check(uint16_t {0x2211});
+    check(uint32_t {0x44332211});
+    check(uint64_t {0x7F77665544332211});
+}
+
+TEST_CASE("to_rgba", "[io]") {
+    using bktga::detail::to_rgba;
+
+    REQUIRE(to_rgba< 8>(0xDDCCBBAA) == 0xFFAAAAAA);
+
+    //with bit-15 set
+    REQUIRE(to_rgba<15>(0xDDCCBBAA) == 0xFF73EF52);
+    REQUIRE(to_rgba<16>(0xDDCCBBAA) == 0xFF73EF52);
+
+    //with bit-15 cleared
+    REQUIRE(to_rgba<15>(0xDDCC3BAA) == 0xFF73EF52);
+    REQUIRE(to_rgba<16>(0xDDCC3BAA) == 0x0073EF52);
+
+    REQUIRE(to_rgba<24>(0xDDCCBBAA) == 0xFFAABBCC);
+    REQUIRE(to_rgba<32>(0xDDCCBBAA) == 0xDDAABBCC);
+}
+
+TEST_CASE("data source", "[io]") {
+    constexpr uint8_t data[] {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
+    };
+
+    auto const check_source = [&](auto& source) {
+        SECTION("size") {
+            auto const size = static_cast<ptrdiff_t>(std::size(data));
+            REQUIRE(source.size() == size);
+        }
+
+        auto const check = [&source](ptrdiff_t const n, auto const& expected) {
+            std::decay_t<decltype(*std::begin(expected))> out;
+            for (size_t i = 0; i < std::size(expected); ++i) {
+                detail::read(source, n, out);
+                REQUIRE(out == expected[i]);
+            }
+        };
+
+        SECTION("read 1 byte at a time") {
+            constexpr uint8_t expected[] {
+                0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
+              , 0x0 // past the end
+            };
+
+            check(1, expected);
+        }
+
+        SECTION("read 2 bytes at a time") {
+            constexpr uint16_t expected[] {
+                0x2211, 0x4433, 0x6655, 0x8877
+              , 0x0 // past the end
+            };
+
+            check(2, expected);
+        }
+
+        SECTION("read 3 bytes at a time") {
+            constexpr uint32_t expected[] {
+                0x332211, 0x665544
+              , 0x8877 // past the end
+            };
+
+            check(3, expected);
+        }
+
+        SECTION("read 4 bytes at a time") {
+            constexpr uint32_t expected[] {
+                0x44332211, 0x88776655
+              , 0x0 // past the end
+            };
+
+            check(4, expected);
+        }
+
+        SECTION("read 5 bytes at a time") {
+            constexpr uint64_t expected[] {
+                0x5544332211, 0x887766
+              , 0x0 // past the end
+            };
+
+            check(5, expected);
+        }
+    };
+
+    SECTION("file_source") {
+        auto source = bktga::detail::file_source {fill_temp_file(data)};
+        check_source(source);
+    }
+
+    SECTION("memory_source") {
+        auto source = bktga::detail::memory_source {data};
+        check_source(source);
+    }
+}
+
+TEST_CASE("memory_source", "[io]") {
 }
 
 TEST_CASE("detect", "[api]") {
@@ -154,54 +294,8 @@ TEST_CASE("detect", "[api]") {
     }
 
     SECTION("file handle") {
-        auto temp_file = bktga::unique_file {std::tmpfile(), fclose};
-        REQUIRE(temp_file);
-
-        fwrite(carray, sizeof(uint8_t), header_size, temp_file.get());
-        fseek(temp_file.get(), 0, SEEK_SET);
-
-        check(detect(std::move(temp_file)));
+        check(detect(fill_temp_file(carray)));
     }
-
-}
-
-TEST_CASE("little_endian_to_host", "[io]") {
-    using bktga::detail::little_endian_to_host;
-
-    auto const check = [](auto const n) noexcept {
-        alignas (uint64_t) constexpr char const data[] {
-            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x7F
-        };
-
-        auto const m = little_endian_to_host(
-            *reinterpret_cast<decltype(n) const*>(data));
-
-        REQUIRE(m == n);
-    };
-
-    check(char     {0x11});
-    check(int8_t   {0x11});
-    check(int16_t  {0x2211});
-    check(int32_t  {0x44332211});
-    check(int64_t  {0x7F77665544332211});
-    check(uint8_t  {0x11});
-    check(uint16_t {0x2211});
-    check(uint32_t {0x44332211});
-    check(uint64_t {0x7F77665544332211});
-}
-
-TEST_CASE("to_rgba", "[io]") {
-    using bktga::detail::to_rgba;
-
-    REQUIRE(to_rgba< 8>(0xDDCCBBAA) == 0xFFAAAAAA);
-
-    //with bit-15 set
-    REQUIRE(to_rgba<15>(0xDDCCBBAA) == 0xFF73EF52);
-    REQUIRE(to_rgba<16>(0xDDCCBBAA) == 0xFF73EF52);
-
-    //with bit-15 cleared
-    REQUIRE(to_rgba<15>(0xDDCC3BAA) == 0xFF73EF52);
-    REQUIRE(to_rgba<16>(0xDDCC3BAA) == 0x0073EF52);
 }
 
 //TEST_CASE("fields", "[io]") {

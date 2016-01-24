@@ -179,7 +179,7 @@ template <> inline constexpr uint32_t to_rgba<24>(uint32_t const n) noexcept {
     // n      -> 0xXXRRGGBB
     // result -> 0x00BBGGRR
 
-    return to_rgba<32>(n) & 0x00FFFFFF;
+    return to_rgba<32>(n) | (0xFF << 24);
 }
 
 inline uint32_t constexpr to_rgba_16_mask(uint32_t const n, int const i) noexcept {
@@ -229,10 +229,8 @@ public:
     {
     }
 
-    explicit file_source(unique_file file)
-      : first_  {0}
-      , last_   {0}
-      , handle_ {std::move(file)}
+    explicit file_source(unique_file file) noexcept
+      : handle_ {std::move(file)}
     {
     }
 
@@ -250,11 +248,12 @@ public:
       , char*     const out      //!< output buffer
       , ptrdiff_t const out_size //!< size of the output buffer
     ) noexcept {
-        auto const result = static_cast<ptrdiff_t>(
-            std::fread(out, 1
-              , static_cast<size_t>(min_0(n, out_size)), *this));
+        auto const read_size = min_0(n, out_size);
+        auto const result = static_cast<ptrdiff_t>(std::fread(
+            out, sizeof(char), static_cast<size_t>(read_size), *this));
 
-        std::fill_n(out + result, min_0(n - result, out_size - result), char {});
+        auto const fill_size = std::max(0, out_size - result);
+        std::fill_n(out + result, fill_size, char {});
     }
 
     void read_at(
@@ -267,11 +266,11 @@ public:
         read(n, out, out_size);
     }
 
-    void seek(ptrdiff_t const offset) {
+    void seek(ptrdiff_t const offset) noexcept {
         std::fseek(*this, static_cast<long>(offset), SEEK_SET);
     }
 private:
-    static unique_file do_open_(char const* const fname) noexcept {
+    static unique_file do_open_(char const* const fname) {
         if (auto const handle = fopen(fname, "rb")) {
             return {handle, std::fclose};
         }
@@ -284,8 +283,6 @@ private:
 
     operator FILE*() const noexcept { return handle_.get(); }
 
-    ptrdiff_t   first_;
-    ptrdiff_t   last_;
     unique_file handle_;
 };
 
@@ -305,7 +302,7 @@ public:
 
     template <typename Container>
     explicit memory_source(Container const& in) noexcept
-      : memory_source {in.data(), in.size()}
+      : memory_source {std::data(in), std::size(in)}
     {
     }
 
@@ -318,12 +315,12 @@ public:
       , char*     const out      //!< output buffer
       , ptrdiff_t const out_size //!< size of the output buffer
     ) noexcept {
-        auto const n0 = min_0(last_ - pos_, n, out_size);
-        std::copy_n(pos_, n0, out);
-        pos_ += n0;
+        auto const read_size = min_0(last_ - pos_, n, out_size);
+        std::copy_n(pos_, read_size, out);
+        pos_ += read_size;
 
-        auto const n1 = min_0(n - n0, out_size - n0);
-        std::fill_n(out + n0, n1, char {});
+        auto const fill_size = std::max(0, out_size - read_size);
+        std::fill_n(out + read_size, fill_size, char {});
     }
 
     void read_at(
@@ -336,7 +333,7 @@ public:
         read(n, out, out_size);
     }
 
-    void seek(ptrdiff_t const offset) {
+    void seek(ptrdiff_t const offset) noexcept {
         pos_ = (offset < 0)       ? first_
              : (offset >= size()) ? last_
              : first_ + offset;
@@ -346,6 +343,12 @@ private:
     char const* last_;
     char const* pos_;
 };
+
+template <typename Source, typename T>
+inline void read(Source& src, ptrdiff_t const n, T& out) noexcept {
+    static_assert(std::is_pod<T> {}, "");
+    src.read(n, reinterpret_cast<char*>(&out), sizeof(T));
+}
 
 /// read at least Bits bits from in at the current position.
 template <ptrdiff_t Bits, typename Source>
