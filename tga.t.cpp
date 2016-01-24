@@ -156,7 +156,7 @@ TEST_CASE("to_rgba", "[io]") {
     REQUIRE(to_rgba<32>(0xDDCCBBAA) == 0xDDAABBCC);
 }
 
-TEST_CASE("data source", "[io]") {
+TEST_CASE("data source - read", "[io]") {
     constexpr uint8_t data[] {
         0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
     };
@@ -232,7 +232,44 @@ TEST_CASE("data source", "[io]") {
     }
 }
 
-TEST_CASE("memory_source", "[io]") {
+TEST_CASE("data source - seek", "[io]") {
+    constexpr uint8_t data[] {
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88
+    };
+
+    auto const check = [&](auto& source) {
+        uint8_t out;
+
+        // past begin
+        source.seek(-1);
+        detail::read(source, 1, out);
+        REQUIRE(out == data[0]);
+
+        // past end
+        source.seek(static_cast<ptrdiff_t>(std::size(data) + 5));
+        detail::read(source, 1, out);
+        REQUIRE(out == uint8_t {0});
+
+        // at begin
+        source.seek(0);
+        detail::read(source, 1, out);
+        REQUIRE(out == data[0]);
+
+        // at end
+        source.seek(static_cast<ptrdiff_t>(std::size(data) - 1));
+        detail::read(source, 1, out);
+        REQUIRE(out == data[std::size(data) - 1]);
+    };
+
+    SECTION("file_source") {
+        auto source = bktga::detail::file_source {fill_temp_file(data)};
+        check(source);
+    }
+
+    SECTION("memory_source") {
+        auto source = bktga::detail::memory_source {data};
+        check(source);
+    }
 }
 
 TEST_CASE("detect", "[api]") {

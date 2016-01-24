@@ -146,6 +146,20 @@ inline constexpr T min_0(T const a, T const b, T const c) noexcept {
     return min_0(min_0(a, b), c);
 }
 
+/// ADL enabled data()
+template <typename Container>
+inline constexpr decltype(auto) data(Container&& c) noexcept {
+    using std::data;
+    return data(c);
+}
+
+/// ADL enabled size()
+template <typename Container>
+inline constexpr decltype(auto) size(Container&& c) noexcept {
+    using std::size;
+    return size(c);
+}
+
 } // namespace bktga::detail
 
 //===----------------------------------------------------------------------===//
@@ -244,9 +258,9 @@ public:
     }
 
     void read(
-        ptrdiff_t const n        //!< number of bytes to read
-      , char*     const out      //!< output buffer
-      , ptrdiff_t const out_size //!< size of the output buffer
+        ptrdiff_t const n        ///< number of bytes to read
+      , char*     const out      ///< output buffer
+      , ptrdiff_t const out_size ///< size of the output buffer
     ) noexcept {
         auto const read_size = min_0(n, out_size);
         auto const result = static_cast<ptrdiff_t>(std::fread(
@@ -254,16 +268,6 @@ public:
 
         auto const fill_size = std::max(0, out_size - result);
         std::fill_n(out + result, fill_size, char {});
-    }
-
-    void read_at(
-        ptrdiff_t const n        //!< number of bytes to read
-      , ptrdiff_t const offset   //!< offset from start
-      , char*     const out      //!< output buffer
-      , ptrdiff_t const out_size //!< size of the output buffer
-    ) noexcept {
-        seek(offset);
-        read(n, out, out_size);
     }
 
     void seek(ptrdiff_t const offset) noexcept {
@@ -302,7 +306,7 @@ public:
 
     template <typename Container>
     explicit memory_source(Container const& in) noexcept
-      : memory_source {std::data(in), std::size(in)}
+      : memory_source {detail::data(in), detail::size(in)}
     {
     }
 
@@ -311,9 +315,9 @@ public:
     }
 
     void read(
-        ptrdiff_t const n        //!< number of bytes to read
-      , char*     const out      //!< output buffer
-      , ptrdiff_t const out_size //!< size of the output buffer
+        ptrdiff_t const n        ///< number of bytes to read
+      , char*     const out      ///< output buffer
+      , ptrdiff_t const out_size ///< size of the output buffer
     ) noexcept {
         auto const read_size = min_0(last_ - pos_, n, out_size);
         std::copy_n(pos_, read_size, out);
@@ -321,16 +325,6 @@ public:
 
         auto const fill_size = std::max(0, out_size - read_size);
         std::fill_n(out + read_size, fill_size, char {});
-    }
-
-    void read_at(
-        ptrdiff_t const n        //!< number of bytes to read
-      , ptrdiff_t const offset   //!< offset from start
-      , char*     const out      //!< output buffer
-      , ptrdiff_t const out_size //!< size of the output buffer
-    ) noexcept {
-        seek(offset);
-        read(n, out, out_size);
     }
 
     void seek(ptrdiff_t const offset) noexcept {
@@ -345,8 +339,24 @@ private:
 };
 
 template <typename Source, typename T>
-inline void read(Source& src, ptrdiff_t const n, T& out) noexcept {
+inline void read(
+    Source&         src ///< input
+  , ptrdiff_t const n   ///< number of bytes to read
+  , T&              out ///< output
+) noexcept {
     static_assert(std::is_pod<T> {}, "");
+    src.read(n, reinterpret_cast<char*>(&out), sizeof(T));
+}
+
+template <typename Source, typename T>
+void read_at(
+    Source&         src    ///< input
+  , ptrdiff_t const n      ///< number of bytes to read
+  , ptrdiff_t const offset ///< offset from start
+  , T&              out    ///< output
+) noexcept {
+    static_assert(std::is_pod<T> {}, "");
+    src.seek(offset);
     src.read(n, reinterpret_cast<char*>(&out), sizeof(T));
 }
 
@@ -354,8 +364,9 @@ inline void read(Source& src, ptrdiff_t const n, T& out) noexcept {
 template <ptrdiff_t Bits, typename Source>
 inline auto read_bits(Source& in) {
     constexpr ptrdiff_t bytes = round_up_bits_to_bytes(Bits);
+
     uint_t<bytes> out {};
-    in.read(bytes, reinterpret_cast<char*>(&out), sizeof(out));
+    read(in, bytes, out);
     return out;
 }
 
@@ -363,7 +374,7 @@ inline auto read_bits(Source& in) {
 template <ptrdiff_t Bytes, typename Source>
 inline auto read_bytes_at(Source& in, ptrdiff_t const offset) {
     uint_t<Bytes> out {};
-    in.read_at(Bytes, offset, reinterpret_cast<char*>(&out), sizeof(out));
+    read_at(in, Bytes, offset, out);
     return out;
 }
 
@@ -406,9 +417,7 @@ inline detail::buffer read_field(
 template <typename Field, typename Source, typename T = typename Field::type>
 inline T read_field(read_field_array_tag, Source& src, ptrdiff_t const offset = 0) {
     T out;
-    src.read_at(Field::size, Field::begin + offset
-      , reinterpret_cast<char*>(&out), Field::size);
-
+    read_at(src, Field::size, Field::begin + offset, out);
     return out;
 }
 
@@ -911,18 +920,11 @@ inline auto detect(Byte const* const beg, Byte const* const end)
     return detect(beg, end - beg);
 }
 
-template <typename Byte, size_t N>
-inline auto detect(Byte const (&data)[N])
-    -> detect_result_t<detail::memory_source>
-{
-    return detect(data + 0, data + N);
-}
-
 template <typename Container>
 inline auto detect(Container const& c)
     -> detect_result_t<detail::memory_source>
 {
-    return detect(c.data(), c.data() + c.size());
+    return detect(detail::data(c), detail::data(c) + detail::size(c));
 }
 
 //===----------------------------------------------------------------------===//
