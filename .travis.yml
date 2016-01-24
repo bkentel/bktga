@@ -16,9 +16,8 @@ git:
   depth: 3
 
 branches:
-  only:
-     - master
-     - develop
+  except:
+     - /^(?i:experimental)-.*$/
 
 matrix:
   include:
@@ -89,6 +88,11 @@ matrix:
       compiler: clang
       env: COMPILER='ccache clang++' SANITIZE='-fsanitize=address'
 
+    - os: osx
+      osx_image: xcode7.3
+      compiler: clang
+      env: COMPILER='ccache clang++' SANITIZE='-fsanitize=address'
+      
 install:
   - |
     if [[ "${TRAVIS_OS_NAME}" == "osx" ]]; then
