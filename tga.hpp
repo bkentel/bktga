@@ -187,7 +187,7 @@ inline uint32_t constexpr to_rgba_16_mask(uint32_t const n, int const i) noexcep
 }
 
 inline uint32_t constexpr to_rgba_16_expand(uint32_t const n, int const i) noexcept {
-    return ((n << 3) | (n >> 2)) << i;
+    return ((n << 3) | (n >> 2)) << i * 8;
 }
 
 template <> inline constexpr uint32_t to_rgba<16>(uint32_t const n) noexcept {
@@ -195,16 +195,16 @@ template <> inline constexpr uint32_t to_rgba<16>(uint32_t const n) noexcept {
     // result -> 0xAABBGGRR
 
     return to_rgba_16_expand(to_rgba_16_mask(n, 0), 0) // red
-         | to_rgba_16_expand(to_rgba_16_mask(n, 0), 0) // green
-         | to_rgba_16_expand(to_rgba_16_mask(n, 0), 0) // blue
-         | (((n & 0x8000) >> 15) * 0xFF);              // alpha
+         | to_rgba_16_expand(to_rgba_16_mask(n, 1), 1) // green
+         | to_rgba_16_expand(to_rgba_16_mask(n, 2), 2) // blue
+         | (((n & 0x8000) << 9) * 0xFF);               // alpha
 }
 
 template <> inline constexpr uint32_t to_rgba<15>(uint32_t const n) noexcept {
     // n      -> X BBBBB GGGGG RRRRR
     // result -> 0x00BBGGRR
 
-    return to_rgba<16>(n) & 0x7FFF;
+    return to_rgba<16>(n | 0x8000);
 }
 
 template <> inline constexpr uint32_t to_rgba<8>(uint32_t const n) noexcept {
@@ -213,7 +213,8 @@ template <> inline constexpr uint32_t to_rgba<8>(uint32_t const n) noexcept {
 
     return ((n & 0xFF) <<  0)  // red
          | ((n & 0xFF) <<  8)  // green
-         | ((n & 0xFF) << 16); // blue
+         | ((n & 0xFF) << 16)  // blue
+         | ((    0xFF) << 24); // alpha
 }
 
 #else

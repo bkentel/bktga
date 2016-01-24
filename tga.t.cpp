@@ -190,6 +190,20 @@ TEST_CASE("little_endian_to_host", "[io]") {
     check(uint64_t {0x7F77665544332211});
 }
 
+TEST_CASE("to_rgba", "[io]") {
+    using bktga::detail::to_rgba;
+
+    REQUIRE(to_rgba< 8>(0xDDCCBBAA) == 0xFFAAAAAA);
+
+    //with bit-15 set
+    REQUIRE(to_rgba<15>(0xDDCCBBAA) == 0xFF73EF52);
+    REQUIRE(to_rgba<16>(0xDDCCBBAA) == 0xFF73EF52);
+
+    //with bit-15 cleared
+    REQUIRE(to_rgba<15>(0xDDCC3BAA) == 0xFF73EF52);
+    REQUIRE(to_rgba<16>(0xDDCC3BAA) == 0x0073EF52);
+}
+
 //TEST_CASE("fields", "[io]") {
 //    namespace detail = bktga::detail;
 //    using detail::static_field_t;
