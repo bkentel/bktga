@@ -47,7 +47,57 @@ std::array<const char*, 2> const test_files {
 
 }
 
+TEST_CASE("round_up_bits_to_bytes", "[utility]") {
+    using bktga::detail::round_up_bits_to_bytes;
+
+    REQUIRE(round_up_bits_to_bytes(-1) == 0);
+    REQUIRE(round_up_bits_to_bytes( 0) == 0);
+    REQUIRE(round_up_bits_to_bytes( 1) == 1);
+    REQUIRE(round_up_bits_to_bytes( 8) == 1);
+    REQUIRE(round_up_bits_to_bytes( 9) == 2);
+    REQUIRE(round_up_bits_to_bytes(16) == 2);
+    REQUIRE(round_up_bits_to_bytes(17) == 3);
+    REQUIRE(round_up_bits_to_bytes(24) == 3);
+    REQUIRE(round_up_bits_to_bytes(25) == 4);
+    REQUIRE(round_up_bits_to_bytes(32) == 4);
+}
+
+TEST_CASE("buffer", "[utility]") {
+    using bktga::detail::buffer;
+
+    auto const check = [](auto const size) {
+        buffer const b {size};
+        REQUIRE(b.size()  == static_cast<ptrdiff_t>(size));
+        REQUIRE(b.begin() == b.data());
+        REQUIRE(b.end()   == (b.data() + size));
+    };
+
+    check(100);
+    check(size_t {100});
+    check(ptrdiff_t {100});
+
+    REQUIRE(buffer { 0}.data() == nullptr);
+    REQUIRE(buffer {-1}.data() == nullptr);
+}
+
+TEST_CASE("min_0", "[utility]") {
+    using bktga::detail::min_0;
+
+    REQUIRE(min_0(-1, -1) == 0);
+    REQUIRE(min_0(-1,  1) == 0);
+    REQUIRE(min_0( 0,  1) == 0);
+    REQUIRE(min_0( 1,  0) == 0);
+    REQUIRE(min_0( 1,  1) == 1);
+    REQUIRE(min_0( 1,  2) == 1);
+    REQUIRE(min_0( 2,  1) == 1);
+
+    REQUIRE(min_0(-1, -1, -1) == 0);
+    REQUIRE(min_0(-1,  1,  2) == 0);
+}
+
 TEST_CASE("detect", "[api]") {
+    using bktga::detect;
+
     constexpr auto header_size = bktga::tga_header_size;
 
     constexpr uint8_t carray[header_size] {
@@ -55,7 +105,7 @@ TEST_CASE("detect", "[api]") {
       , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
     };
 
-    auto const result = bktga::detect(carray);
+    auto const result = detect(carray);
 
     auto const check = [](auto const& result) {
         auto const& tga = result.tga;
@@ -84,23 +134,23 @@ TEST_CASE("detect", "[api]") {
         std::vector<uint8_t> const vector {begin(array), end(array)};
 
         // from c-array
-        check(bktga::detect(carray));
+        check(detect(carray));
 
         // from std::array
-        check(bktga::detect(array));
+        check(detect(array));
 
         // from std::vector
-        check(bktga::detect(vector));
+        check(detect(vector));
 
         // from pointer pair
-        check(bktga::detect(std::begin(carray), std::end(carray)));
+        check(detect(std::begin(carray), std::end(carray)));
 
         // from pointer and size
-        check(bktga::detect(carray, header_size));
+        check(detect(carray, header_size));
     }
 
     SECTION("file name") {
-        check(bktga::detect(bktga::read_from_file, test_files[0]));
+        check(detect(bktga::read_from_file, test_files[0]));
     }
 
     SECTION("file handle") {
@@ -110,9 +160,34 @@ TEST_CASE("detect", "[api]") {
         fwrite(carray, sizeof(uint8_t), header_size, temp_file.get());
         fseek(temp_file.get(), 0, SEEK_SET);
 
-        check(bktga::detect(std::move(temp_file)));
+        check(detect(std::move(temp_file)));
     }
 
+}
+
+TEST_CASE("little_endian_to_host", "[io]") {
+    using bktga::detail::little_endian_to_host;
+
+    auto const check = [](auto const n) noexcept {
+        alignas (uint64_t) constexpr char const data[] {
+            0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x7F
+        };
+
+        auto const m = little_endian_to_host(
+            *reinterpret_cast<decltype(n) const*>(data));
+
+        REQUIRE(m == n);
+    };
+
+    check(char     {0x11});
+    check(int8_t   {0x11});
+    check(int16_t  {0x2211});
+    check(int32_t  {0x44332211});
+    check(int64_t  {0x7F77665544332211});
+    check(uint8_t  {0x11});
+    check(uint16_t {0x2211});
+    check(uint32_t {0x44332211});
+    check(uint64_t {0x7F77665544332211});
 }
 
 //TEST_CASE("fields", "[io]") {

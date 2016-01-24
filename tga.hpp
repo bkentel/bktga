@@ -113,7 +113,7 @@ class buffer {
 public:
     explicit buffer(size_t const size)
       : size_ {static_cast<ptrdiff_t>(size)}
-      , data_ {new char[size]}
+      , data_ {size ? new char[size] : nullptr}
     {
     }
 
@@ -135,8 +135,9 @@ private:
 /// Minimum value clamped to a floor of 0.
 template <typename T>
 inline constexpr T min_0(T const a, T const b) noexcept {
-    return (a <= b && a > 0) ? a :
-           (          b > 0) ? b : T {0};
+    return (a < b)
+             ? (a < 0 ? 0 : a)
+             : (b < 0 ? 0 : b);
 }
 
 /// @see min_0(a, b)
