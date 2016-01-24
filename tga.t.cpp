@@ -55,51 +55,10 @@ TEST_CASE("detect", "[api]") {
       , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
     };
 
-    SECTION("memory") {
-        std::array<uint8_t, header_size> array;
-        std::copy_n(carray, header_size, array.data());
-
-        std::vector<uint8_t> const vector {begin(array), end(array)};
-
-        // from c-array
-        REQUIRE(bktga::detect(carray));
-        // from std::array
-        REQUIRE(bktga::detect(array));
-        // from std::vector
-        REQUIRE(bktga::detect(vector));
-        // from pointer pair
-        REQUIRE(bktga::detect(std::begin(carray), std::end(carray)));
-        // from pointer and size
-        REQUIRE(bktga::detect(carray, header_size));
-    }
-
-    SECTION("file name") {
-        REQUIRE(bktga::detect(bktga::read_from_file, test_files[0]));
-    }
-
-    SECTION("file handle") {
-        auto temp_file = bktga::unique_file {std::tmpfile(), fclose};
-        REQUIRE(temp_file);
-
-        fwrite(carray, sizeof(uint8_t), header_size, temp_file.get());
-        fseek(temp_file.get(), 0, SEEK_SET);
-
-        REQUIRE(bktga::detect(std::move(temp_file)));
-    }
-
-}
-
-TEST_CASE("detect ", "[tga]") {
-    constexpr uint8_t header_data[] {
-        0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
-      , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
-    };
+    auto const result = bktga::detect(carray);
 
     auto const check = [](auto const& result) {
-        REQUIRE(result);
         auto const& tga = result.tga;
-
-        REQUIRE(result.status == bktga::status::success);
 
         REQUIRE(tga.id_length   == 0);
         REQUIRE(tga.cmap_type   == bktga::tga_color_map_type::present);
@@ -118,15 +77,42 @@ TEST_CASE("detect ", "[tga]") {
         REQUIRE(tga.image_desc.origin()         == bktga::tga_origin::lo_left);
     };
 
-    SECTION("c-array") {
-        check(bktga::detect(header_data));
+    SECTION("memory") {
+        std::array<uint8_t, header_size> array;
+        std::copy_n(carray, header_size, array.data());
+
+        std::vector<uint8_t> const vector {begin(array), end(array)};
+
+        // from c-array
+        check(bktga::detect(carray));
+
+        // from std::array
+        check(bktga::detect(array));
+
+        // from std::vector
+        check(bktga::detect(vector));
+
+        // from pointer pair
+        check(bktga::detect(std::begin(carray), std::end(carray)));
+
+        // from pointer and size
+        check(bktga::detect(carray, header_size));
     }
 
-    SECTION("std::array") {
-        std::array<uint8_t, bktga::tga_header_size> array;
-        std::copy(std::begin(header_data), std::end(header_data), begin(array));
-        check(bktga::detect(array));
+    SECTION("file name") {
+        check(bktga::detect(bktga::read_from_file, test_files[0]));
     }
+
+    SECTION("file handle") {
+        auto temp_file = bktga::unique_file {std::tmpfile(), fclose};
+        REQUIRE(temp_file);
+
+        fwrite(carray, sizeof(uint8_t), header_size, temp_file.get());
+        fseek(temp_file.get(), 0, SEEK_SET);
+
+        check(bktga::detect(std::move(temp_file)));
+    }
+
 }
 
 //TEST_CASE("fields", "[io]") {
@@ -188,22 +174,6 @@ TEST_CASE("detect ", "[tga]") {
 //        check(src_file);
 //    }
 //}
-
-TEST_CASE("api", "[api]") {
-    auto tga = bktga::detect(bktga::read_from_file, "8-bit-rle.tga");
-    if (!tga) {
-        REQUIRE(false);
-    }
-
-    auto const decoded = bktga::decode(tga);
-
-    auto const handle = std::unique_ptr<FILE, decltype(&fclose)> {
-        fopen("out.raw", "wb"), &fclose
-    };
-
-    REQUIRE(handle);
-    fwrite(decoded.data(), sizeof(uint32_t), decoded.size(), handle.get());
-}
 
 //TEST_CASE("memory_source from std::array", "[read]") {
 //    using size = std::integral_constant<ptrdiff_t, 10>;

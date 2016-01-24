@@ -444,6 +444,8 @@ constexpr ptrdiff_t tga_footer_size           = 26;
 constexpr ptrdiff_t tga_footer_signature_size = 18;
 constexpr ptrdiff_t tga_extension_area_size   = 495;
 
+constexpr char const tga_signature[] {"TRUEVISION-XFILE."};
+
 /// Color map type.
 enum class tga_color_map_type : uint8_t {
     absent           = 0   ///< no pallet present
@@ -611,6 +613,10 @@ public:
     ptrdiff_t                size        {};
     tga_version              version     {tga_version::invalid};
 private:
+    static bool check_footer_signature_(field::signature_t const& sig) noexcept {
+        return std::equal(begin(sig), end(sig), tga_signature);
+    }
+
     template <typename Source>
     tga_descriptor(Source& src, ptrdiff_t const fsize)
       : id_length   {detail::read_field(field::id_length   {}, src)}
@@ -631,6 +637,13 @@ private:
       , size        {fsize}
       , version     {tga_version::v1}
     {
+        if (check_footer_signature_(signature)) {
+            version = tga_version::v2;
+        } else {
+            std::fill(begin(signature), end(signature), char {});
+            ext_offset = 0;
+            dev_offset = 0;
+        }
     }
 };
 
