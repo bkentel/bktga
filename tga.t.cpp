@@ -49,8 +49,8 @@ template <typename Container>
 bktga::unique_file fill_temp_file(Container const& c) noexcept {
     using std::begin;
     using std::end;
-    using std::data;
-    using std::size;
+    using bktga::detail::size;
+    using bktga::detail::data;
 
     auto temp_file = bktga::unique_file {std::tmpfile(), fclose};
     REQUIRE(temp_file);
@@ -163,13 +163,13 @@ TEST_CASE("data source - read", "[io]") {
 
     auto const check_source = [&](auto& source) {
         SECTION("size") {
-            auto const size = static_cast<ptrdiff_t>(std::size(data));
+            auto const size = static_cast<ptrdiff_t>(bktga::detail::size(data));
             REQUIRE(source.size() == size);
         }
 
         auto const check = [&source](ptrdiff_t const n, auto const& expected) {
             std::decay_t<decltype(*std::begin(expected))> out;
-            for (size_t i = 0; i < std::size(expected); ++i) {
+            for (size_t i = 0; i < bktga::detail::size(expected); ++i) {
                 detail::read(source, n, out);
                 REQUIRE(out == expected[i]);
             }
@@ -246,7 +246,7 @@ TEST_CASE("data source - seek", "[io]") {
         REQUIRE(out == data[0]);
 
         // past end
-        source.seek(static_cast<ptrdiff_t>(std::size(data) + 5));
+        source.seek(static_cast<ptrdiff_t>(bktga::detail::size(data) + 5));
         detail::read(source, 1, out);
         REQUIRE(out == uint8_t {0});
 
@@ -256,9 +256,9 @@ TEST_CASE("data source - seek", "[io]") {
         REQUIRE(out == data[0]);
 
         // at end
-        source.seek(static_cast<ptrdiff_t>(std::size(data) - 1));
+        source.seek(static_cast<ptrdiff_t>(bktga::detail::size(data) - 1));
         detail::read(source, 1, out);
-        REQUIRE(out == data[std::size(data) - 1]);
+        REQUIRE(out == data[bktga::detail::size(data) - 1]);
     };
 
     SECTION("file_source") {
@@ -272,6 +272,8 @@ TEST_CASE("data source - seek", "[io]") {
     }
 }
 
+
+
 TEST_CASE("detect", "[api]") {
     using bktga::detect;
 
@@ -281,8 +283,6 @@ TEST_CASE("detect", "[api]") {
         0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
       , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
     };
-
-    auto const result = detect(carray);
 
     auto const check = [](auto const& result) {
         auto const& tga = result.tga;

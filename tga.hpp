@@ -36,6 +36,7 @@
 #include <memory>                            // for unique_ptr
 #include <type_traits>                       // for conditional_t, etc
 #include <vector>                            // for vector
+#include <initializer_list>                  // for std::initializer_list
 
 #include <cerrno>                            // for errno
 #include <cstdint>                           // for uint32_t, uint8_t, etc
@@ -111,14 +112,10 @@ inline constexpr ptrdiff_t round_up_bits_to_bytes(T const n) noexcept {
 /// A wrapper around a dynamically allocated buffer.
 class buffer {
 public:
-    explicit buffer(size_t const size)
-      : size_ {static_cast<ptrdiff_t>(size)}
-      , data_ {size ? new char[size] : nullptr}
-    {
-    }
-
-    explicit buffer(ptrdiff_t const size)
-      : buffer {static_cast<size_t>(size > 0 ? size : 0)}
+    template <typename T
+      , typename = std::enable_if_t<std::is_integral<T>::value>>
+    explicit buffer(T const size)
+      : buffer {size, std::is_signed<T> {}}
     {
     }
 
@@ -128,6 +125,21 @@ public:
     char const* begin() const noexcept { return data(); }
     char const* end()   const noexcept { return data() + size_; }
 private:
+    //unsigned
+    template <typename T>
+    explicit buffer(T const size, std::false_type)
+      : size_ {static_cast<ptrdiff_t>(size)}
+      , data_ {size ? new char[size] : nullptr}
+    {
+    }
+
+    //signed
+    template <typename T>
+    explicit buffer(T const size, std::true_type)
+      : buffer {static_cast<size_t>(size > 0 ? size : 0), std::false_type {}}
+    {
+    }
+
     ptrdiff_t                size_;
     std::unique_ptr<char []> data_;
 };
@@ -146,19 +158,33 @@ inline constexpr T min_0(T const a, T const b, T const c) noexcept {
     return min_0(min_0(a, b), c);
 }
 
-/// ADL enabled data()
+/// c++17 std::data()
 template <typename Container>
-inline constexpr decltype(auto) data(Container&& c) noexcept {
-    using std::data;
-    return data(c);
+inline constexpr auto data(Container&& c) noexcept {
+    return c.data();
 }
 
-/// ADL enabled size()
-template <typename Container>
-inline constexpr decltype(auto) size(Container&& c) noexcept {
-    using std::size;
-    return size(c);
+template <typename T, size_t Size>
+inline constexpr T* data(T (&array)[Size]) noexcept {
+    return array;
 }
+
+template <typename T>
+inline constexpr T const* data(std::initializer_list<T> ilist) noexcept {
+    return ilist.begin();
+}
+
+/// c++17 enabled size()
+template <typename T, size_t Size>
+inline constexpr size_t size(T (&)[Size]) noexcept {
+    return Size;
+}
+
+template <typename Container>
+inline constexpr auto size(Container&& c) noexcept -> decltype(c.size()) {
+    return c.size();
+}
+
 
 } // namespace bktga::detail
 
@@ -193,7 +219,7 @@ template <> inline constexpr uint32_t to_rgba<24>(uint32_t const n) noexcept {
     // n      -> 0xXXRRGGBB
     // result -> 0x00BBGGRR
 
-    return to_rgba<32>(n) | (0xFF << 24);
+    return to_rgba<32>(n) | (0xFFu << 24);
 }
 
 inline uint32_t constexpr to_rgba_16_mask(uint32_t const n, int const i) noexcept {
@@ -225,10 +251,10 @@ template <> inline constexpr uint32_t to_rgba<8>(uint32_t const n) noexcept {
     // n      -> 0xXXXXXXNN
     // result -> 0x00NNNNNN
 
-    return ((n & 0xFF) <<  0)  // red
-         | ((n & 0xFF) <<  8)  // green
-         | ((n & 0xFF) << 16)  // blue
-         | ((    0xFF) << 24); // alpha
+    return ((n & 0xFFu) <<  0)  // red
+         | ((n & 0xFFu) <<  8)  // green
+         | ((n & 0xFFu) << 16)  // blue
+         | ((    0xFFu) << 24); // alpha
 }
 
 #else
@@ -266,7 +292,7 @@ public:
         auto const result = static_cast<ptrdiff_t>(std::fread(
             out, sizeof(char), static_cast<size_t>(read_size), *this));
 
-        auto const fill_size = std::max(0, out_size - result);
+        auto const fill_size = std::max(ptrdiff_t {}, out_size - result);
         std::fill_n(out + result, fill_size, char {});
     }
 
@@ -323,7 +349,7 @@ public:
         std::copy_n(pos_, read_size, out);
         pos_ += read_size;
 
-        auto const fill_size = std::max(0, out_size - read_size);
+        auto const fill_size = std::max(ptrdiff_t {}, out_size - read_size);
         std::fill_n(out + read_size, fill_size, char {});
     }
 
@@ -485,10 +511,10 @@ enum class tga_image_type : uint8_t {
 
 /// Image origin.
 enum class tga_origin : uint8_t {
-    lo_left  //!< Pixel data starts in the lower left corner
-  , lo_right //!< Pixel data starts in the lower right corner
-  , up_left  //!< Pixel data starts in the upper left corner
-  , up_right //!< Pixel data starts in the upper right corner
+    lo_left  ///< Pixel data starts in the lower left corner
+  , lo_right ///< Pixel data starts in the lower right corner
+  , up_left  ///< Pixel data starts in the upper left corner
+  , up_right ///< Pixel data starts in the upper right corner
 };
 
 /// Image interleave type.
@@ -934,6 +960,11 @@ template <typename Source>
 inline decode_t decode(detect_result_t<Source>& in) {
     return in ? detail::decode(in.tga, in.source)
               : decode_t {};
+}
+
+template <typename Source>
+inline decode_t decode(detect_result_t<Source>&& in) {
+    return decode(in);
 }
 
 } // namespace bktga
