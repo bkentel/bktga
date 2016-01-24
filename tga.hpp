@@ -673,7 +673,7 @@ private:
       , image_desc  {detail::read_field(field::image_desc  {}, src)}
       , ext_offset  {detail::read_field(field::ext_offset  {}, src, fsize - tga_footer_size)}
       , dev_offset  {detail::read_field(field::dev_offset  {}, src, fsize - tga_footer_size)}
-      , signature   {detail::read_field(field::signature   {}, src, fsize - tga_footer_size)}
+      , signature   (detail::read_field(field::signature   {}, src, fsize - tga_footer_size))
       , size        {fsize}
       , version     {tga_version::v1}
     {
