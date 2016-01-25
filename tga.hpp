@@ -90,6 +90,12 @@ using uint_t = std::conditional_t<N < 1, void,
                std::conditional_t<N < 9, uint64_t, void>>>>>;
 
 template <typename T>
+inline constexpr auto enum_value(T const n) noexcept {
+    static_assert(std::is_enum<T> {}, "");
+    return static_cast<std::underlying_type_t<T>>(n);
+}
+
+template <typename T>
 using is_byte_type = std::integral_constant<bool
   , std::is_integral<T>::value && sizeof(T) == 1>;
 
@@ -488,33 +494,33 @@ constexpr char const tga_signature[] {"TRUEVISION-XFILE."};
 
 /// Color map type.
 enum class tga_color_map_type : uint8_t {
-    absent           = 0   ///< no pallet present
-  , present          = 1   ///< pallet present
+    absent           = 0   //!< no pallet present
+  , present          = 1   //!< pallet present
 
-  , unknown_reserved = 127 ///< values <= 127 are reserved
-  , unknown_custom         ///< 128 <= values <= 255 indicate custom types
+  , unknown_reserved = 127 //!< values <= 127 are reserved
+  , unknown_custom         //!< 128 <= values <= 255 indicate custom types
 };
 
 /// Image type.
 enum class tga_image_type : uint8_t {
-    none             = 0   ///< no image data
-  , color_mapped     = 1   ///< palletized image data
-  , true_color       = 2   ///< non-palletized image data
-  , grayscale        = 3   ///< 8-bit grayscale data
-  , rle_color_mapped = 9   ///< RLE compressed palletized image data
-  , rle_true_color   = 10  ///< RLE compressed non-palletized image data
-  , rle_grayscale    = 11  ///< RLE compressed 8-bit grayscale data
+    none             = 0   //!< no image data
+  , color_mapped     = 1   //!< palletized image data
+  , true_color       = 2   //!< non-palletized image data
+  , grayscale        = 3   //!< 8-bit grayscale data
+  , rle_color_mapped = 9   //!< RLE compressed palletized image data
+  , rle_true_color   = 10  //!< RLE compressed non-palletized image data
+  , rle_grayscale    = 11  //!< RLE compressed 8-bit grayscale data
 
-  , unknown_reserved = 127 ///< values <= 127 are reserved
-  , unknown_custom         ///< 128 <= values <= 255 indicate custom types
+  , unknown_reserved = 127 //!< values <= 127 are reserved
+  , unknown_custom         //!< 128 <= values <= 255 indicate custom types
 };
 
 /// Image origin.
 enum class tga_origin : uint8_t {
-    lo_left  ///< Pixel data starts in the lower left corner
-  , lo_right ///< Pixel data starts in the lower right corner
-  , up_left  ///< Pixel data starts in the upper left corner
-  , up_right ///< Pixel data starts in the upper right corner
+    lo_left  //!< Pixel data starts in the lower left corner
+  , lo_right //!< Pixel data starts in the lower right corner
+  , up_left  //!< Pixel data starts in the upper left corner
+  , up_right //!< Pixel data starts in the upper right corner
 };
 
 /// Image interleave type.
@@ -559,7 +565,7 @@ struct tga_image_descriptor {
 };
 
 class tga_descriptor {
-private:
+public:
     struct field {
         using header_t    = std::array<char, tga_header_size>;
         using footer_t    = std::array<char, tga_footer_size>;
@@ -587,7 +593,7 @@ private:
         using dev_offset  = sf<uint32_t,             ext_offset::end>;
         using signature   = sf<signature_t,          dev_offset::end>;
     };
-public:
+
     tga_descriptor() = default;
 
     template <typename Source>
@@ -597,10 +603,11 @@ public:
     }
 
     bool is_valid() const noexcept {
-        return version == tga_version::v1 || version == tga_version::v2;
+        return diagnostic.empty()
+            && (version == tga_version::v1 || version == tga_version::v2);
     }
 
-    bool uses_color_map() const noexcept {
+    bool is_color_mapped() const noexcept {
         return img_type == tga_image_type::color_mapped
             || img_type == tga_image_type::rle_color_mapped;
     }
@@ -652,6 +659,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////
     ptrdiff_t                size        {};
     tga_version              version     {tga_version::invalid};
+    string_view              diagnostic  {};
 private:
     static bool check_footer_signature_(field::signature_t const& sig) noexcept {
         return std::equal(begin(sig), end(sig), tga_signature);
@@ -676,6 +684,7 @@ private:
       , signature   (detail::read_field(field::signature   {}, src, fsize - tga_footer_size))
       , size        {fsize}
       , version     {tga_version::v1}
+      , diagnostic  {check_()}
     {
         if (check_footer_signature_(signature)) {
             version = tga_version::v2;
@@ -684,6 +693,65 @@ private:
             ext_offset = 0;
             dev_offset = 0;
         }
+    }
+
+    string_view check_() const noexcept {
+        auto const match_list = [](int const n, std::initializer_list<int> list) noexcept {
+            return std::any_of(begin(list), end(list), [n](auto const i) noexcept {
+                return i == n;
+            });
+        };
+
+        auto const check_color_mapped = [&]() noexcept -> string_view {
+            if (cmap_type != tga_color_map_type::present) {
+                return {"absent or unknown color map type"};
+            }
+
+            if (!match_list(pixel_depth, {8, 15, 16, 24, 32})) {
+                return {"unexpected pixel (index) depth"};
+            }
+
+            if (!match_list(cmap_depth, {8, 15, 16, 24, 32})) {
+                return {"unexpected color map depth"};
+            }
+
+            return {};
+        };
+
+        auto const check_true_color = [&]() noexcept -> string_view {
+            if (!match_list(pixel_depth, {15, 16, 24, 32})) {
+                return {"unexpected pixel (index) depth"};
+            }
+
+            return {};
+        };
+
+        auto const check_grayscale = [&]() noexcept -> string_view {
+            if (pixel_depth != 8) {
+                return {"unexpected grayscale pixel depth"};
+            }
+
+            return {};
+        };
+
+        using im = tga_image_type;
+        switch (img_type) {
+        case im::none:             return {};
+        case im::rle_color_mapped: BKTGA_FALLTHROUGH
+        case im::color_mapped:     return check_color_mapped();
+        case im::rle_true_color:   BKTGA_FALLTHROUGH
+        case im::true_color:       return check_true_color();
+        case im::rle_grayscale:    BKTGA_FALLTHROUGH
+        case im::grayscale:        return check_grayscale();
+        case im::unknown_reserved: BKTGA_FALLTHROUGH
+        case im::unknown_custom:   BKTGA_FALLTHROUGH
+        default:                   break;
+        }
+
+        return (detail::enum_value(img_type)
+              < detail::enum_value(im::unknown_custom))
+          ? string_view {"unknown reserved image type"}
+          : string_view {"unknown custom image type"};
     }
 };
 
@@ -694,7 +762,7 @@ struct tga_color_map {
       : first_ {tga.cmap_start}
     {
         auto const field = detail::variable_field_t {
-            tga.uses_color_map() ? tga.color_map_size() : 0
+            tga.is_color_mapped() ? tga.color_map_size() : 0
           , tga.color_map_offset()
         };
 
@@ -738,34 +806,6 @@ private:
 //===----------------------------------------------------------------------===//
 using decode_t = std::vector<uint32_t>;
 
-struct status_t {
-    enum class category {
-        success, info, fail
-    };
-
-    template <size_t N>
-    constexpr status_t(char const (&message)[N], category const c) noexcept
-      : msg {message}, len {N}, cat {c}
-    {
-    }
-
-    char const* msg;
-    size_t      len;
-    category    cat;
-};
-
-inline constexpr bool operator==(status_t const lhs, status_t const rhs) noexcept {
-    return lhs.msg == rhs.msg;
-}
-
-inline constexpr bool operator!=(status_t const lhs, status_t const rhs) noexcept {
-    return lhs.msg != rhs.msg;
-}
-
-namespace status {
-constexpr status_t success {"Success", status_t::category::success};
-} //namespace bktga::status
-
 /// The result of a call to detect.
 template <typename Source>
 class detect_result_t {
@@ -776,16 +816,14 @@ public:
     }
 
     explicit operator bool() const noexcept {
-        return status.cat != status_t::category::fail;
+        return tga.is_valid();
     }
 
-    status_t       status;
     tga_descriptor tga;
     Source         source;
 private:
     detect_result_t(tga_descriptor&& tga_data, Source&& src)
-      : status {bktga::status::success}
-      , tga    {std::move(tga_data)}
+      : tga    {std::move(tga_data)}
       , source {std::move(src)}
     {
     }
@@ -883,7 +921,7 @@ inline decode_t decode(
 template <ptrdiff_t Bpp, typename Source>
 inline decode_t decode(tga_descriptor const& tga, Source& src) {
     using detail::decode;
-    return tga.uses_color_map()
+    return tga.is_color_mapped()
       ? decode<Bpp>(tga, src
           , [m = tga_color_map(tga, src)](auto const c) noexcept -> uint32_t {
                 return m[static_cast<ptrdiff_t>(c)];

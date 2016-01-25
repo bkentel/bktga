@@ -276,6 +276,52 @@ TEST_CASE("data source - seek", "[io]") {
     }
 }
 
+TEST_CASE("detect - bad", "[api]") {
+    uint8_t carray[bktga::tga_header_size] {
+        0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
+      , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
+    };
+
+    auto const check = [&] {
+        auto const result = bktga::detect(carray);
+        REQUIRE_FALSE(result);
+        REQUIRE_FALSE(result.tga.is_valid());
+        REQUIRE_FALSE(result.tga.diagnostic.empty());
+    };
+
+    using field = bktga::tga_descriptor::field;
+
+    SECTION("bad color map type") {
+        carray[field::cmap_type::begin] = 0;   // none
+        check();
+        carray[field::cmap_type::begin] = 127; // reserved
+        check();
+        carray[field::cmap_type::begin] = 255; // custom
+        check();
+    }
+
+    SECTION("bad image type") {
+        carray[field::img_type::begin] = 127; // reserved
+        check();
+        carray[field::img_type::begin] = 255; // custom
+        check();
+    }
+
+    SECTION("bad color map depth") {
+        carray[field::cmap_depth::begin] = 1;
+        check();
+        carray[field::cmap_depth::begin] = 33;
+        check();
+    }
+
+    SECTION("bad pixel depth") {
+        carray[field::pixel_depth::begin] = 1;
+        check();
+        carray[field::pixel_depth::begin] = 33;
+        check();
+    }
+
+}
 
 
 TEST_CASE("detect", "[api]") {
