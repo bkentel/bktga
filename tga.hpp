@@ -119,6 +119,8 @@ inline constexpr ptrdiff_t round_up_bits_to_bytes(T const n) noexcept {
 /// A wrapper around a dynamically allocated buffer.
 class buffer {
 public:
+    buffer() = default;
+
     template <typename T
       , typename = std::enable_if_t<std::is_integral<T>::value>>
     explicit buffer(T const size)
@@ -147,7 +149,7 @@ private:
     {
     }
 
-    ptrdiff_t                size_;
+    ptrdiff_t                size_ = 0;
     std::unique_ptr<char []> data_;
 };
 
@@ -379,6 +381,14 @@ inline void read(
     src.read(n, reinterpret_cast<char*>(&out), sizeof(T));
 }
 
+template <typename T, typename Source>
+inline T read(Source& src) noexcept {
+    static_assert(std::is_pod<T> {}, "");
+    T out;
+    src.read(sizeof(T), reinterpret_cast<char*>(&out), sizeof(T));
+    return out;
+}
+
 template <typename Source, typename T>
 void read_at(
     Source&         src    ///< input
@@ -389,6 +399,18 @@ void read_at(
     static_assert(std::is_pod<T> {}, "");
     src.seek(offset);
     src.read(n, reinterpret_cast<char*>(&out), sizeof(T));
+}
+
+template <typename T, typename Source>
+T read_at(
+    Source&         src    ///< input
+  , ptrdiff_t const offset ///< offset from start
+) noexcept {
+    static_assert(std::is_pod<T> {}, "");
+    T out;
+    src.seek(offset);
+    src.read(sizeof(T), reinterpret_cast<char*>(&out), sizeof(T));
+    return out;
 }
 
 /// read at least Bits bits from in at the current position.
@@ -562,6 +584,41 @@ struct tga_image_descriptor {
     }
 
     uint8_t value = 0;
+};
+
+class tga_developer_area {
+public:
+    struct record_t {
+        uint16_t tag;
+        uint32_t offset;
+        uint32_t size;
+    };
+
+    template <typename Source>
+    tga_developer_area(Source&& src, ptrdiff_t const offset)
+      : size_ {detail::read_at<uint16_t>(src, offset)}
+    {
+        records_.reserve(size_);
+        std::generate_n(back_inserter(records_), size_, [&] {
+            return record_t {
+                detail::read<uint16_t>(src)
+              , detail::read<uint32_t>(src)
+              , detail::read<uint32_t>(src)
+            };
+        });
+    }
+
+    template <typename Source>
+    detail::buffer at(Source&& src, record_t const r) const {
+        return read_field(src, detail::variable_field_t {r.size, r.offset});
+    }
+
+    auto   begin() const { return std::begin(records_); }
+    auto   end()   const { return std::end(records_); }
+    size_t size()  const { return size_; }
+private:
+    uint16_t              size_;
+    std::vector<record_t> records_;
 };
 
 class tga_descriptor {

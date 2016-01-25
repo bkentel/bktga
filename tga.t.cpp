@@ -32,7 +32,7 @@
 
 #include <algorithm>
 #include <array>
-#include <chrono>
+#include <numeric>
 
 namespace detail = bktga::detail;
 
@@ -420,6 +420,67 @@ TEST_CASE("detect", "[api]") {
     SECTION("file handle") {
         check(detect(fill_temp_file(carray)));
     }
+}
+
+TEST_CASE("developer area", "[footer]") {
+    uint8_t const header[] = {
+        0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x01, 0x00, 0x01, 0x00, 0x18, 0x00, 0xFF, 0xFF, 0xFF
+    };
+
+    std::vector<bktga::tga_developer_area::record_t> records {
+        {1, 0, 0}
+      , {2, 0, 0}
+      , {3, 0, 0}
+      , {4, 0, 0}
+    };
+
+    std::vector<std::string> const record_data {
+        "record 1 data 1"
+      , "record 2 data 22"
+      , "record 3 data 333"
+      , "record 4 data 4444"
+    };
+
+    bktga::unique_file file {
+        fopen("./test/dev.tga", "wb"), &fclose};
+
+    auto const offset      = fwrite(header, 1, sizeof(decltype(header)), file.get());
+    auto const header_size = 2 + records.size() * (2 + 4 + 4);
+    auto const data_size   = std::accumulate(
+        begin(record_data), end(record_data), size_t {},
+        [&, i = size_t {}](size_t const sum, std::string const& s) mutable {
+            records[i].offset = static_cast<uint32_t>(sum + header_size + offset);
+            records[i].size   = static_cast<uint32_t>(s.size());
+            return sum + records[i++].size;
+        });
+
+    auto const write = [&](auto const n) {
+        fwrite(&n, 1, sizeof(n), file.get());
+    };
+
+    write(static_cast<uint16_t>(records.size()));
+
+    for (auto const& r : records) {
+        write(r.tag);
+        write(r.offset);
+        write(r.size);
+    }
+
+    for (auto const& r : record_data) {
+        fwrite(r.data(), 1, r.size(), file.get());
+    }
+
+    write(static_cast<uint32_t>(0));
+    write(static_cast<uint32_t>(offset));
+
+    fwrite(bktga::tga_signature, 1, sizeof(decltype(bktga::tga_signature)), file.get());
+    file.reset();
+
+    auto result = bktga::detect(bktga::read_from_file, "./test/dev.tga");
+    auto dev = bktga::tga_developer_area {result.source, result.tga.dev_offset};
+
+    REQUIRE(dev.size() == 4);
 }
 
 //TEST_CASE("fields", "[io]") {
