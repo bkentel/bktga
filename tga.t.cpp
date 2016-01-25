@@ -37,13 +37,6 @@
 namespace detail = bktga::detail;
 
 namespace {
-char const test_file_8bit_rle[] = "./test/8-bit-rle.tga";
-char const test_file_4_color[]  = "./test/4-color.tga";
-
-std::array<const char*, 2> const test_files {
-    test_file_8bit_rle
-  , test_file_4_color
-};
 
 template <typename Container>
 bktga::unique_file fill_temp_file(Container const& c) noexcept {
@@ -62,6 +55,24 @@ bktga::unique_file fill_temp_file(Container const& c) noexcept {
     fseek(temp_file.get(), 0, SEEK_SET);
 
     return temp_file;
+}
+
+template <typename Container>
+void write_raw(Container const& c, bktga::string_view const filename) noexcept {
+    using std::begin;
+    using std::end;
+    using bktga::detail::size;
+    using bktga::detail::data;
+
+    std::string fname = filename.to_string();
+    fname += ".raw";
+
+    auto file = bktga::unique_file {std::fopen(fname.c_str(), "wb"), fclose};
+    REQUIRE(file);
+
+    using value_t = std::decay_t<decltype(*begin(c))>;
+    static_assert(std::is_pod<value_t> {}, "");
+    fwrite(data(c), sizeof(value_t), size(c), file.get());
 }
 
 }
@@ -149,12 +160,12 @@ TEST_CASE("to_rgba", "[io]") {
     REQUIRE(to_rgba< 8>(0xDDCCBBAA) == 0xFFAAAAAA);
 
     //with bit-15 set
-    REQUIRE(to_rgba<15>(0xDDCCBBAA) == 0xFF73EF52);
-    REQUIRE(to_rgba<16>(0xDDCCBBAA) == 0xFF73EF52);
+    REQUIRE(to_rgba<15>(0xDDCCBBAA) == 0xFF52EF73);
+    REQUIRE(to_rgba<16>(0xDDCCBBAA) == 0xFF52EF73);
 
     //with bit-15 cleared
-    REQUIRE(to_rgba<15>(0xDDCC3BAA) == 0xFF73EF52);
-    REQUIRE(to_rgba<16>(0xDDCC3BAA) == 0x0073EF52);
+    REQUIRE(to_rgba<15>(0xDDCC3BAA) == 0xFF52EF73);
+    REQUIRE(to_rgba<16>(0xDDCC3BAA) == 0x0052EF73);
 
     REQUIRE(to_rgba<24>(0xDDCCBBAA) == 0xFFAABBCC);
     REQUIRE(to_rgba<32>(0xDDCCBBAA) == 0xDDAABBCC);
@@ -377,12 +388,21 @@ TEST_CASE("detect", "[api]") {
     }
 
     SECTION("file name") {
-        check(detect(bktga::read_from_file, test_files[0]));
+        //check(detect(bktga::read_from_file, test_files[0]));
     }
 
     SECTION("file handle") {
         check(detect(fill_temp_file(carray)));
     }
+}
+
+TEST_CASE("mono 16", "[test file]") {
+    bktga::string_view const filename {"./test/4-color.tga"};
+
+    auto result = bktga::detect(bktga::read_from_file, filename);
+    REQUIRE(result);
+
+    write_raw(bktga::decode(result), filename);
 }
 
 //TEST_CASE("fields", "[io]") {

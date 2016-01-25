@@ -240,9 +240,9 @@ template <> inline constexpr uint32_t to_rgba<16>(uint32_t const n) noexcept {
     // n      -> A BBBBB GGGGG RRRRR
     // result -> 0xAABBGGRR
 
-    return to_rgba_16_expand(to_rgba_16_mask(n, 0), 0) // red
+    return to_rgba_16_expand(to_rgba_16_mask(n, 2), 0) // red
          | to_rgba_16_expand(to_rgba_16_mask(n, 1), 1) // green
-         | to_rgba_16_expand(to_rgba_16_mask(n, 2), 2) // blue
+         | to_rgba_16_expand(to_rgba_16_mask(n, 0), 2) // blue
          | (((n & 0x8000) << 9) * 0xFF);               // alpha
 }
 
@@ -442,7 +442,8 @@ inline detail::buffer read_field(
   , ptrdiff_t        const offset = 0
 ) {
     detail::buffer out {field.size()};
-    src.read_at(field.size(), field.begin() + offset, out.data(), out.size());
+    src.seek(field.begin() + offset);
+    src.read(field.size(), out.data(), out.size());
     return out;
 }
 
@@ -702,6 +703,26 @@ private:
             });
         };
 
+        auto const check_attribute_bits = [&](int const depth) noexcept -> string_view {
+            bool const ok = [&] {
+                auto const bits = image_desc.attribute_bits();
+
+                switch (depth) {
+                case 8  : return match_list(bits, {0});
+                case 15 : return match_list(bits, {0});
+                case 16 : return match_list(bits, {0, 1});
+                case 24 : return match_list(bits, {0});
+                case 32 : return match_list(bits, {8});
+                default : break;
+                }
+
+                return false;
+            }();
+
+            return ok ? string_view {}
+                      : string_view {"invalid attribute bit count"};
+        };
+
         auto const check_color_mapped = [&]() noexcept -> string_view {
             if (cmap_type != tga_color_map_type::present) {
                 return {"absent or unknown color map type"};
@@ -715,7 +736,7 @@ private:
                 return {"unexpected color map depth"};
             }
 
-            return {};
+            return check_attribute_bits(cmap_depth);
         };
 
         auto const check_true_color = [&]() noexcept -> string_view {
@@ -723,12 +744,16 @@ private:
                 return {"unexpected pixel (index) depth"};
             }
 
-            return {};
+            return check_attribute_bits(pixel_depth);
         };
 
         auto const check_grayscale = [&]() noexcept -> string_view {
             if (pixel_depth != 8) {
                 return {"unexpected grayscale pixel depth"};
+            }
+
+            if (image_desc.attribute_bits()) {
+                return {"invalid attribute bit count"};
             }
 
             return {};
