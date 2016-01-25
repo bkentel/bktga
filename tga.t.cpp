@@ -332,6 +332,32 @@ TEST_CASE("detect - bad", "[api]") {
         check();
     }
 
+    SECTION("bad attribute") {
+        auto const set_attribute_bits = [&](int const bits) noexcept {
+            auto& value = carray[field::image_desc::begin];
+            value = static_cast<uint8_t>(value | (bits & 0b1111));
+        };
+
+        carray[field::cmap_depth::begin] = 8;
+        set_attribute_bits(1);
+        check();
+
+        carray[field::cmap_depth::begin] = 15;
+        set_attribute_bits(1);
+        check();
+
+        carray[field::cmap_depth::begin] = 16;
+        set_attribute_bits(2);
+        check();
+
+        carray[field::cmap_depth::begin] = 24;
+        set_attribute_bits(1);
+        check();
+
+        carray[field::cmap_depth::begin] = 32;
+        set_attribute_bits(1);
+        check();
+    }
 }
 
 
@@ -388,21 +414,12 @@ TEST_CASE("detect", "[api]") {
     }
 
     SECTION("file name") {
-        //check(detect(bktga::read_from_file, test_files[0]));
+        check(detect(bktga::read_from_file, "./test/cm-8-rgb24a0-756x512-rle.tga"));
     }
 
     SECTION("file handle") {
         check(detect(fill_temp_file(carray)));
     }
-}
-
-TEST_CASE("mono 16", "[test file]") {
-    bktga::string_view const filename {"./test/4-color.tga"};
-
-    auto result = bktga::detect(bktga::read_from_file, filename);
-    REQUIRE(result);
-
-    write_raw(bktga::decode(result), filename);
 }
 
 //TEST_CASE("fields", "[io]") {

@@ -37,6 +37,7 @@
 #include <type_traits>                       // for conditional_t, etc
 #include <vector>                            // for vector
 #include <initializer_list>                  // for std::initializer_list
+#include <system_error>                      // for system_error, etc
 
 #include <cerrno>                            // for errno
 #include <cstdint>                           // for uint32_t, uint8_t, etc
@@ -307,14 +308,12 @@ public:
     }
 private:
     static unique_file do_open_(char const* const fname) {
-        if (auto const handle = fopen(fname, "rb")) {
-            return {handle, std::fclose};
+        auto const handle = fopen(fname, "rb");
+        if (!handle) {
+            throw std::system_error(errno, std::system_category());
         }
 
-        //TODO
-        auto const ecode = errno;
-
-        return {nullptr, std::fclose};
+        return {handle, std::fclose};
     }
 
     operator FILE*() const noexcept { return handle_.get(); }
