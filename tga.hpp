@@ -979,19 +979,27 @@ inline decode_t decode(
     return result;
 }
 
+template <ptrdiff_t Bpp>
+inline auto make_color_mapper() noexcept {
+    return [](auto const c) noexcept -> uint32_t {
+        return to_rgba<Bpp>(c);
+    };
+}
+
+template <ptrdiff_t Bpp, typename Source>
+inline auto make_color_mapper(tga_descriptor const& tga, Source& src) {
+    return [m = tga_color_map(tga, src)](auto const c) noexcept -> uint32_t {
+        return m[static_cast<ptrdiff_t>(c)];
+    };
+}
+
 /// Level 2 -- Choose color mapper.
 template <ptrdiff_t Bpp, typename Source>
 inline decode_t decode(tga_descriptor const& tga, Source& src) {
     using detail::decode;
     return tga.is_color_mapped()
-      ? decode<Bpp>(tga, src
-          , [m = tga_color_map(tga, src)](auto const c) noexcept -> uint32_t {
-                return m[static_cast<ptrdiff_t>(c)];
-            })
-      : decode<Bpp>(tga, src
-          , [](auto const c) noexcept -> uint32_t {
-                return to_rgba<Bpp>(c);
-            });
+      ? decode<Bpp>(tga, src, make_color_mapper<Bpp>(tga, src))
+      : decode<Bpp>(tga, src, make_color_mapper<Bpp>());
 }
 
 /// Level 1 -- Choose source pixel depth.
