@@ -422,37 +422,40 @@ TEST_CASE("detect", "[api]") {
     }
 }
 
-TEST_CASE("developer area", "[footer]") {
+namespace {
+
+template <typename It1, typename It2>
+bool create_dev_area_tga(
+    bktga::string_view const fname
+  , It1 const first_record, It1 const last_record
+  , It2 const first_data,   It2 const last_data
+) {
+    auto records = std::vector<bktga::tga_developer_area::record_t>(
+        first_record, last_record);
+
     uint8_t const header[] = {
-        0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x01, 0x00, 0x01, 0x00, 0x18, 0x00, 0xFF, 0xFF, 0xFF
-    };
-
-    std::vector<bktga::tga_developer_area::record_t> records {
-        {1, 0, 0}
-      , {2, 0, 0}
-      , {3, 0, 0}
-      , {4, 0, 0}
-    };
-
-    std::vector<std::string> const record_data {
-        "record 1 data 1"
-      , "record 2 data 22"
-      , "record 3 data 333"
-      , "record 4 data 4444"
+        0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+      , 0x01, 0x00, 0x01, 0x00, 0x18, 0x00
+      , 0xFF, 0xFF, 0xFF
     };
 
     bktga::unique_file file {
-        fopen("./test/dev.tga", "wb"), &fclose};
+        fopen(fname.to_string().c_str(), "wb"), &fclose};
 
-    auto const offset      = fwrite(header, 1, sizeof(decltype(header)), file.get());
+    if (!file) {
+        return false;
+    }
+
+    // start of the developer area
+    auto const offset = fwrite(header, 1, sizeof(decltype(header)), file.get());
     auto const header_size = 2 + records.size() * (2 + 4 + 4);
-    auto const data_size   = std::accumulate(
-        begin(record_data), end(record_data), size_t {},
-        [&, i = size_t {}](size_t const sum, std::string const& s) mutable {
-            records[i].offset = static_cast<uint32_t>(sum + header_size + offset);
-            records[i].size   = static_cast<uint32_t>(s.size());
-            return sum + records[i++].size;
+    auto const data_size = std::accumulate(
+        first_data, last_data, size_t {},
+        [&, it = begin(records)](size_t const sum, std::string const& s) mutable {
+            auto& r = *it++;
+            r.offset = static_cast<uint32_t>(sum + header_size + offset);
+            r.size   = static_cast<uint32_t>(s.size() + 1);
+            return sum + r.size;
         });
 
     auto const write = [&](auto const n) {
@@ -467,159 +470,54 @@ TEST_CASE("developer area", "[footer]") {
         write(r.size);
     }
 
-    for (auto const& r : record_data) {
-        fwrite(r.data(), 1, r.size(), file.get());
-    }
+    std::for_each(first_data, last_data, [&](auto const& r) {
+        fwrite(r.data(), 1, r.size() + 1, file.get());
+    });
 
     write(static_cast<uint32_t>(0));
     write(static_cast<uint32_t>(offset));
 
     fwrite(bktga::tga_signature, 1, sizeof(decltype(bktga::tga_signature)), file.get());
-    file.reset();
 
-    auto result = bktga::detect(bktga::read_from_file, "./test/dev.tga");
-    auto dev = bktga::tga_developer_area {result.source, result.tga.dev_offset};
-
-    REQUIRE(dev.size() == 4);
+    return true;
 }
 
-//TEST_CASE("fields", "[io]") {
-//    namespace detail = bktga::detail;
-//    using detail::static_field_t;
-//    using detail::variable_field_t;
-//    using detail::read_field;
-//
-//    constexpr std::array<uint8_t, 18> mem_data {
-//        0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
-//      , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
-//    };
-//
-//    detail::memory_source src_mem  {mem_data};
-//    detail::file_source   src_file {"8-bit-rle.tga"};
-//
-//    SECTION("static fields") {
-//        constexpr auto field_8a_t  = static_field_t<char>          {};
-//        constexpr auto field_8b_t  = static_field_t<signed char>   {};
-//        constexpr auto field_8c_t  = static_field_t<unsigned char> {};
-//        constexpr auto field_16a_t = static_field_t<int16_t,  1>   {};
-//        constexpr auto field_16b_t = static_field_t<uint16_t, 1>   {};
-//        constexpr auto field_32a_t = static_field_t<int32_t,  4>   {};
-//        constexpr auto field_32b_t = static_field_t<uint32_t, 4>   {};
-//        constexpr auto field_64a_t = static_field_t<int64_t,  0>   {};
-//        constexpr auto field_64b_t = static_field_t<uint64_t, 0>   {};
-//
-//        constexpr auto field_array_t = static_field_t<decltype(mem_data)> {};
-//
-//        auto const check = [&](auto& src) {
-//            REQUIRE(read_field(field_8a_t,  src) == 0x00);
-//            REQUIRE(read_field(field_8b_t,  src) == 0x00);
-//            REQUIRE(read_field(field_8c_t,  src) == 0x00);
-//            REQUIRE(read_field(field_16a_t, src) == 0x09'01);
-//            REQUIRE(read_field(field_16b_t, src) == 0x09'01);
-//            REQUIRE(read_field(field_32a_t, src) == 0x18'01'00'00);
-//            REQUIRE(read_field(field_32b_t, src) == 0x18'01'00'00);
-//            REQUIRE(read_field(field_64a_t, src) == 0x18'01'00'00'00'09'01'00ll);
-//            REQUIRE(read_field(field_64b_t, src) == 0x18'01'00'00'00'09'01'00ull);
-//
-//            auto const a = read_field(field_array_t, src);
-//            REQUIRE(std::equal(begin(mem_data), end(mem_data), begin(a), end(a)));
-//        };
-//
-//        check(src_mem);
-//        check(src_file);
-//    }
-//
-//    SECTION("variable fields") {
-//        auto const check = [&](auto& src) {
-//            using std::begin;
-//            using std::end;
-//
-//            auto const a = read_field(variable_field_t {18, 0}, src);
-//            REQUIRE(std::equal(begin(mem_data), end(mem_data), begin(a), end(a)));
-//        };
-//
-//        check(src_mem);
-//        check(src_file);
-//    }
-//}
+} // namespace
 
-//TEST_CASE("memory_source from std::array", "[read]") {
-//    using size = std::integral_constant<ptrdiff_t, 10>;
-//
-//    auto const data = [] {
-//        std::array<char, size::value> out;
-//        std::iota(begin(out), end(out), 1);
-//        return out;
-//    }();
-//
-//    SECTION("check size") {
-//        for (ptrdiff_t i = 0; i < size::value; ++i) {
-//            memory_source s {data, i};
-//            REQUIRE(s.size() == (size::value - i));
-//        }
-//    }
-//
-//    memory_source src {data};
-//
-//    SECTION("read 1 byte") {
-//        for (ptrdiff_t i = 0; i < size::value; ++i) {
-//            char c {};
-//            src.read(1, &c, 1);
-//            REQUIRE(c == (i + 1));
-//        }
-//    }
-//
-//    SECTION("over-read source") {
-//        std::array<char, size::value> out;
-//        src.read(size::value + 1, out.data(), out.size());
-//        REQUIRE(std::equal(begin(out), end(out), begin(data), end(data)));
-//    }
-//
-//    SECTION("over-read dest") {
-//        std::array<char, size::value - 1> out;
-//        src.read(size::value, out.data(), out.size());
-//        REQUIRE(std::equal(begin(out), end(out), begin(data)));
-//    }
-//
-//    SECTION("under-read") {
-//        std::array<char, size::value + 3> out;
-//        src.read(out.size(), out.data(), out.size());
-//        REQUIRE(std::equal(begin(data), end(data), begin(out)));
-//
-//        auto const it = std::find_if_not(begin(out) + size::value, end(out)
-//            , [](auto const n) { return n == 0; });
-//
-//        REQUIRE(it == end(out));
-//    }
-//}
-//
-//TEST_CASE("memory_source from std::vector", "[read]") {
-//    using size = std::integral_constant<ptrdiff_t, 10>;
-//
-//    auto const data = [] {
-//        std::vector<char> out;
-//        out.reserve(size::value);
-//        std::generate_n(std::back_inserter(out), size::value, [i = char {1}]() mutable {
-//            return i++;
-//        });
-//
-//        return out;
-//    }();
-//
-//    for (ptrdiff_t i = 0; i < size::value; ++i) {
-//        memory_source s {data, i};
-//        REQUIRE(s.size() == (size::value - i));
-//    }
-//}
-//
-//TEST_CASE("file_source", "[read]") {
-//    file_source src {"foo.txt"};
-//
-//    std::array<char, 5> out;
-//    src.read(5, out.data(), out.size());
-//
-//}
+TEST_CASE("developer area", "[footer]") {
+    std::vector<uint16_t> const tags {
+        1, 2, 3, 4
+    };
 
+    std::vector<std::string> const data {
+        "record 1 data 1"
+      , "record 2 data 22"
+      , "record 3 data 333"
+      , "record 4 data 4444"
+    };
+
+    bktga::string_view const filename {"./test/dev.tga"};
+
+    REQUIRE(create_dev_area_tga(filename
+      , begin(tags), end(tags), begin(data), end(data)));
+
+    auto result = bktga::detect(bktga::read_from_file, filename);
+    REQUIRE(result);
+
+    auto const dev = bktga::tga_developer_area {result.source, result.tga.dev_offset};
+    REQUIRE(dev.size() == 4);
+
+    size_t i = 0;
+    for (auto const& r : dev) {
+        REQUIRE(r.tag  == tags[i]);
+        REQUIRE(r.size == (data[i].size() + 1));
+
+        auto const buffer = dev.get_data(result.source, r);
+        REQUIRE(std::equal(begin(data[i]), end(data[i]), std::begin(buffer)));
+
+        ++i;
+    }
+}
 
 #if defined(_MSC_VER)
 #   pragma warning(pop)

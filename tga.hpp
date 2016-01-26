@@ -586,12 +586,28 @@ struct tga_image_descriptor {
     uint8_t value = 0;
 };
 
+/// Developer area
 class tga_developer_area {
 public:
     struct record_t {
-        uint16_t tag;
-        uint32_t offset;
-        uint32_t size;
+        record_t(uint16_t const tag_)
+          : tag {tag_}
+        {
+        }
+
+        template <typename Source>
+        explicit record_t(Source& src
+          , std::enable_if_t<!std::is_integral<Source>::value>* = nullptr
+        )
+          : tag    {detail::read<uint16_t>(src)}
+          , offset {detail::read<uint32_t>(src)}
+          , size   {detail::read<uint32_t>(src)}
+        {
+        }
+
+        uint16_t tag    {};
+        uint32_t offset {};
+        uint32_t size   {};
     };
 
     template <typename Source>
@@ -600,17 +616,13 @@ public:
     {
         records_.reserve(size_);
         std::generate_n(back_inserter(records_), size_, [&] {
-            return record_t {
-                detail::read<uint16_t>(src)
-              , detail::read<uint32_t>(src)
-              , detail::read<uint32_t>(src)
-            };
+            return record_t {src};
         });
     }
 
     template <typename Source>
-    detail::buffer at(Source&& src, record_t const r) const {
-        return read_field(src, detail::variable_field_t {r.size, r.offset});
+    detail::buffer get_data(Source&& src, record_t const r) const {
+        return read_field(detail::variable_field_t {r.size, r.offset}, src);
     }
 
     auto   begin() const { return std::begin(records_); }
