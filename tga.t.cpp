@@ -551,6 +551,12 @@ TEST_CASE("developer area", "[footer]") {
     }
 }
 
+TEST_CASE("extension area", "[footer]") {
+    auto result = detect(bktga::read_from_file, "./test/tc-rgb16a1-128x128.tga");
+    auto ext = bktga::tga_extension_area {result.source, result.tga.ext_offset};
+
+}
+
 TEST_CASE("convert", "[api]") {
     bktga::string_view const files[] {
         "./test/cm-8-rgb24a0-756x512-rle.tga"
