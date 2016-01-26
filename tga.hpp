@@ -371,41 +371,15 @@ private:
     char const* pos_;
 };
 
-template <typename Source, typename T>
-inline void read(
-    Source&         src ///< input
-  , ptrdiff_t const n   ///< number of bytes to read
-  , T&              out ///< output
-) noexcept {
-    static_assert(std::is_pod<T> {}, "");
-    src.read(n, reinterpret_cast<char*>(&out), sizeof(T));
-}
-
 template <typename T, typename Source>
 inline T read(Source& src) noexcept {
-    static_assert(std::is_pod<T> {}, "");
     T out;
     src.read(sizeof(T), reinterpret_cast<char*>(&out), sizeof(T));
     return out;
 }
 
-template <typename Source, typename T>
-void read_at(
-    Source&         src    ///< input
-  , ptrdiff_t const n      ///< number of bytes to read
-  , ptrdiff_t const offset ///< offset from start
-  , T&              out    ///< output
-) noexcept {
-    static_assert(std::is_pod<T> {}, "");
-    src.seek(offset);
-    src.read(n, reinterpret_cast<char*>(&out), sizeof(T));
-}
-
 template <typename T, typename Source>
-T read_at(
-    Source&         src    ///< input
-  , ptrdiff_t const offset ///< offset from start
-) noexcept {
+inline T read_at(Source& src, ptrdiff_t const offset) noexcept {
     static_assert(std::is_pod<T> {}, "");
     T out;
     src.seek(offset);
@@ -417,17 +391,8 @@ T read_at(
 template <ptrdiff_t Bits, typename Source>
 inline auto read_bits(Source& in) {
     constexpr ptrdiff_t bytes = round_up_bits_to_bytes(Bits);
-
-    uint_t<bytes> out {};
-    read(in, bytes, out);
-    return out;
-}
-
-/// read exactly Bytes bytes from in starting at offset.
-template <ptrdiff_t Bytes, typename Source>
-inline auto read_bytes_at(Source& in, ptrdiff_t const offset) {
-    uint_t<Bytes> out {};
-    read_at(in, Bytes, offset, out);
+    uint_t<bytes> out;
+    in.read(bytes, reinterpret_cast<char*>(&out), sizeof(out));
     return out;
 }
 
@@ -470,21 +435,19 @@ inline detail::buffer read_field(
 
 template <typename Field, typename Source, typename T = typename Field::type>
 inline T read_field(read_field_array_tag, Source& src, ptrdiff_t const offset = 0) {
-    T out;
-    read_at(src, Field::size, Field::begin + offset, out);
-    return out;
+    return read_at<T>(src, Field::begin + offset);
 }
 
 template <typename Field, typename Source, typename T = typename Field::type>
 inline T read_field(read_field_scalar_tag, Source& src, ptrdiff_t const offset = 0) {
     return static_cast<T>(little_endian_to_host(
-        read_bytes_at<Field::size>(src, Field::begin + offset)));
+        read_at<uint_t<Field::size>>(src,  Field::begin + offset)));
 }
 
 template <typename Field, typename Source, typename T = typename Field::type>
 inline T read_field(read_field_construct_tag, Source& src, ptrdiff_t const offset = 0) {
     return T {little_endian_to_host(
-        read_bytes_at<sizeof(T)>(src, Field::begin + offset))};
+        read_at<uint_t<sizeof(T)>>(src, Field::begin + offset))};
 }
 
 /// Read a static field defined by field from src.
@@ -610,6 +573,8 @@ public:
         uint32_t size   {};
     };
 
+    tga_developer_area() = default;
+
     template <typename Source>
     tga_developer_area(Source&& src, ptrdiff_t const offset)
       : size_ {detail::read_at<uint16_t>(src, offset)}
@@ -629,8 +594,8 @@ public:
     auto   end()   const { return std::end(records_); }
     size_t size()  const { return size_; }
 private:
-    uint16_t              size_;
-    std::vector<record_t> records_;
+    uint16_t              size_    {};
+    std::vector<record_t> records_ {};
 };
 
 class tga_descriptor {
@@ -932,6 +897,7 @@ constexpr read_from_file_t read_from_file {};
 //===----------------------------------------------------------------------===//
 namespace detail {
 
+/// RLE compresses (repeat) packets
 template <ptrdiff_t Bpp, typename Source, typename ColorMapper, typename OutIt>
 inline void decode_rle_compressed(
     ptrdiff_t   const  count
@@ -942,6 +908,7 @@ inline void decode_rle_compressed(
     std::fill_n(out, count, cmap(read_bits<Bpp>(src)));
 }
 
+/// RLE "raw" packets
 template <ptrdiff_t Bpp, typename Source, typename ColorMapper, typename OutIt>
 inline void decode_rle_raw(
     ptrdiff_t   const  count
@@ -954,6 +921,7 @@ inline void decode_rle_raw(
     });
 }
 
+/// decode RLE encoded data
 template <ptrdiff_t Bpp, typename Source, typename ColorMapper, typename OutIt>
 inline void decode_rle(
     tga_descriptor const& tga
@@ -962,7 +930,7 @@ inline void decode_rle(
   , OutIt                 out
 ) {
     for (ptrdiff_t i = 0; i < tga.pixel_count(); ) {
-        auto const packet = read_bits<8>(src);
+        auto const packet = read<uint8_t>(src);
         bool const is_raw = !(packet & 0b1000'0000);
         auto const count  =  (packet & 0b0111'1111) + 1;
 
@@ -976,6 +944,7 @@ inline void decode_rle(
     }
 }
 
+/// decode uncompressed data
 template <ptrdiff_t Bpp, typename Source, typename ColorMapper, typename OutIt>
 inline void decode_direct(
     tga_descriptor const& tga
@@ -1096,6 +1065,27 @@ inline decode_t decode(detect_result_t<Source>& in) {
 template <typename Source>
 inline decode_t decode(detect_result_t<Source>&& in) {
     return decode(in);
+}
+
+//===----------------------------------------------------------------------===//
+//                              API - read_id
+//===----------------------------------------------------------------------===//
+template <typename OutIt, typename Source>
+OutIt read_id(detect_result_t<Source>& in, OutIt const dest) {
+    auto const buffer = detail::read_field(detail::variable_field_t {
+        in.tga.id_length, in.tga.id_offset()}, in.source);
+
+    return std::copy(std::begin(buffer), std::end(buffer), dest);
+}
+
+//===----------------------------------------------------------------------===//
+//                              API - read_developer_area
+//===----------------------------------------------------------------------===//
+template <typename Source>
+tga_developer_area read_developer_area(detect_result_t<Source>& in) {
+    return (in && in.tga.dev_offset)
+      ? tga_developer_area {in.source, in.tga.dev_offset}
+      : tga_developer_area {};
 }
 
 } // namespace bktga

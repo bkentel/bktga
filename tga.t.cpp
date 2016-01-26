@@ -185,7 +185,7 @@ TEST_CASE("data source - read", "[io]") {
         auto const check = [&source](ptrdiff_t const n, auto const& expected) {
             std::decay_t<decltype(*std::begin(expected))> out;
             for (size_t i = 0; i < bktga::detail::size(expected); ++i) {
-                detail::read(source, n, out);
+                source.read(n, reinterpret_cast<char*>(&out), sizeof(out));
                 REQUIRE(out == expected[i]);
             }
         };
@@ -257,22 +257,22 @@ TEST_CASE("data source - seek", "[io]") {
 
         // past begin
         source.seek(-1);
-        detail::read(source, 1, out);
+        out = detail::read<uint8_t>(source);
         REQUIRE(out == data[0]);
 
         // past end
         source.seek(static_cast<ptrdiff_t>(bktga::detail::size(data) + 5));
-        detail::read(source, 1, out);
+        out = detail::read<uint8_t>(source);
         REQUIRE(out == uint8_t {0});
 
         // at begin
         source.seek(0);
-        detail::read(source, 1, out);
+        out = detail::read<uint8_t>(source);
         REQUIRE(out == data[0]);
 
         // at end
         source.seek(static_cast<ptrdiff_t>(bktga::detail::size(data) - 1));
-        detail::read(source, 1, out);
+        out = detail::read<uint8_t>(source);
         REQUIRE(out == data[bktga::detail::size(data) - 1]);
     };
 
@@ -422,6 +422,38 @@ TEST_CASE("detect", "[api]") {
     }
 }
 
+TEST_CASE("read_id", "[api]") {
+    constexpr uint8_t carray[] {
+        0x05, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
+      , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
+      , 0x65, 0x66, 0x67, 0x68, 0x00,
+    };
+
+    auto result = bktga::detect(carray);
+    std::vector<char> id;
+
+    auto last = bktga::read_id(result, back_inserter(id));
+    REQUIRE(id.size() == 5);
+    REQUIRE(std::equal(
+        begin(id), end(id), carray + result.tga.id_offset()));
+
+    // last should be at the end of id after read_id
+    *last = 'A';
+    REQUIRE(id.back() == 'A');
+}
+
+TEST_CASE("read_developer_area", "[api]") {
+    constexpr uint8_t carray[] {
+        0x00, 0x01, 0x09, 0x00, 0x00, 0x00, 0x01, 0x18, 0x00
+      , 0x00, 0x00, 0x00, 0xF4, 0x02, 0x00, 0x02, 0x08, 0x00
+    };
+
+    auto       result = bktga::detect(carray);
+    auto const dev    = bktga::read_developer_area(result);
+    REQUIRE(dev.size() == 0);
+    REQUIRE(dev.begin() == dev.end());
+}
+
 namespace {
 
 template <typename It1, typename It2>
@@ -504,7 +536,7 @@ TEST_CASE("developer area", "[footer]") {
     auto result = bktga::detect(bktga::read_from_file, filename);
     REQUIRE(result);
 
-    auto const dev = bktga::tga_developer_area {result.source, result.tga.dev_offset};
+    auto const dev = bktga::read_developer_area(result);
     REQUIRE(dev.size() == 4);
 
     size_t i = 0;
@@ -516,6 +548,19 @@ TEST_CASE("developer area", "[footer]") {
         REQUIRE(std::equal(begin(data[i]), end(data[i]), std::begin(buffer)));
 
         ++i;
+    }
+}
+
+TEST_CASE("convert", "[api]") {
+    bktga::string_view const files[] {
+        "./test/cm-8-rgb24a0-756x512-rle.tga"
+      , "./test/tc-rgb16a1-128x128.tga"
+    };
+
+    for (auto const& fname : files) {
+        auto result  = detect(bktga::read_from_file, fname);
+        auto decoded = bktga::decode(result);
+        write_raw(decoded, fname);
     }
 }
 
