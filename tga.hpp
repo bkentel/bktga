@@ -744,12 +744,12 @@ public:
     template <typename Source>
     tga_extension_area(Source& src, ptrdiff_t const offset)
       : extension_size          {field::extension_size::read_at(src, offset)}
-      , author_name             {field::author_name::read(src)}
-      , author_comments         {field::author_comments::read(src)}
+      , author_name             (field::author_name::read(src))
+      , author_comments         (field::author_comments::read(src))
       , date_time_stamp         {src}
-      , job_name                {field::job_name::read(src)}
+      , job_name                (field::job_name::read(src))
       , job_time                {src}
-      , software_name           {field::software_name::read(src)}
+      , software_name           (field::software_name::read(src))
       , software_version        {src}
       , key_color               {field::key_color::read(src)}
       , pixel_aspect_ratio      {src}
