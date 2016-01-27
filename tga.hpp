@@ -100,12 +100,6 @@ template <typename T>
 using is_byte_type = std::integral_constant<bool
   , std::is_integral<T>::value && sizeof(T) == 1>;
 
-template <typename T>
-struct is_array : std::false_type {};
-
-template <typename T, size_t N>
-struct is_array<std::array<T, N>> : std::true_type {};
-
 /// Return the number of bytes (rounded up) required for @p n bits where
 /// @p n >= 0; otherwise 0.
 template <typename T>
@@ -292,11 +286,7 @@ public:
         return size;
     }
 
-    void read(
-        ptrdiff_t const n        ///< number of bytes to read
-      , char*     const out      ///< output buffer
-      , ptrdiff_t const out_size ///< size of the output buffer
-    ) noexcept {
+    void read(ptrdiff_t const n, char* const out, ptrdiff_t const out_size) noexcept {
         auto const read_size = min_0(n, out_size);
         auto const result = static_cast<ptrdiff_t>(std::fread(
             out, sizeof(char), static_cast<size_t>(read_size), *this));
@@ -347,11 +337,7 @@ public:
         return last_ - first_;
     }
 
-    void read(
-        ptrdiff_t const n        ///< number of bytes to read
-      , char*     const out      ///< output buffer
-      , ptrdiff_t const out_size ///< size of the output buffer
-    ) noexcept {
+    void read(ptrdiff_t const n, char* const out, ptrdiff_t const out_size) noexcept {
         auto const read_size = min_0(last_ - pos_, n, out_size);
         std::copy_n(pos_, read_size, out);
         pos_ += read_size;
@@ -372,124 +358,106 @@ private:
 };
 
 template <typename T, typename Source>
-inline T read(Source& src) noexcept {
+inline T read(Source& src) {
     T out;
     src.read(sizeof(T), reinterpret_cast<char*>(&out), sizeof(T));
     return out;
 }
 
 template <typename T, typename Source>
-inline T read_at(Source& src, ptrdiff_t const offset) noexcept {
-    static_assert(std::is_pod<T> {}, "");
-    T out;
+inline T read_at(Source& src, ptrdiff_t const offset) {
     src.seek(offset);
-    src.read(sizeof(T), reinterpret_cast<char*>(&out), sizeof(T));
-    return out;
-}
-
-/// read at least Bits bits from in at the current position.
-template <ptrdiff_t Bits, typename Source>
-inline auto read_bits(Source& in) {
-    constexpr ptrdiff_t bytes = round_up_bits_to_bytes(Bits);
-    uint_t<bytes> out;
-    in.read(bytes, reinterpret_cast<char*>(&out), sizeof(out));
-    return out;
-}
-
-struct read_field_scalar_tag    {}; ///< @see read_field
-struct read_field_array_tag     {}; ///< @see read_field
-struct read_field_construct_tag {}; ///< @see read_field
-
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_array_tag, Source& src) {
     return read<T>(src);
 }
 
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_scalar_tag, Source& src) {
-    return static_cast<T>(little_endian_to_host(read<uint_t<Field::size>>(src)));
+template <ptrdiff_t Bits, typename Source>
+inline auto read_bits(Source& src) {
+    using U = uint_t<round_up_bits_to_bytes(Bits)>;
+    return read<U>(src);
 }
 
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_construct_tag, Source& src) {
-    return T {little_endian_to_host(read<uint_t<sizeof(T)>>(src))};
-}
-
-/// Read a static field defined by field from src.
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(Field, Source& src) {
-    using tag = std::conditional_t<std::is_scalar<T>::value
-      , read_field_scalar_tag
-      , std::conditional_t<is_array<T>::value
-          , read_field_array_tag
-          , read_field_construct_tag>>;
-
-    return read_field<Field>(tag {}, src);
-}
-
-/// Get the size of a field (required due to padding)
-template <typename T, bool IsScalar = std::is_scalar<T>::value>
-struct field_size;
-
-template <typename T>
-struct field_size<T, true>
-  : std::integral_constant<size_t, sizeof(T)> {};
-
-template <typename T>
-struct field_size<T, false>
-  : std::integral_constant<size_t, T::size> {};
-
-template <typename T, size_t N>
-struct field_size<T[N], false>
-  : std::integral_constant<size_t, sizeof(T) * N> {};
-
-template <typename T, size_t N>
-struct field_size<std::array<T, N>, false>
-  : std::integral_constant<size_t, sizeof(T) * N> {};
-
-/// statically sized and located data field
-template <typename T, ptrdiff_t Offset = 0>
-struct static_field_t {
-    using type = std::decay_t<T>;
-
-    static constexpr ptrdiff_t size  = field_size<T>::value;
-    static constexpr ptrdiff_t begin = Offset;
-    static constexpr ptrdiff_t end   = Offset + size;
-
-    template <typename Source>
-    static T read(Source& src) {
-        return detail::read_field(static_field_t {}, src);
-    }
-
-    template <typename Source>
-    static T read_at(Source& src, ptrdiff_t const offset) {
-        src.seek(offset);
-        return read(src);
-    }
-};
-
-/// variably sized and located data field
-struct variable_field_t {
-    ptrdiff_t size()  const noexcept { return size_; }
-    ptrdiff_t begin() const noexcept { return offset_; }
-    ptrdiff_t end()   const noexcept { return size_ + offset_; }
-
-    ptrdiff_t size_;
-    ptrdiff_t offset_;
-};
-
-/// Read a variable field defined by field from src.
 template <typename Source>
-inline detail::buffer read_field(
-    variable_field_t const field
-  , Source&                src
-  , ptrdiff_t        const offset = 0
-) {
-    detail::buffer out {field.size()};
-    src.seek(field.begin() + offset);
-    src.read(field.size(), out.data(), out.size());
+buffer read_variable_field(Source& src, ptrdiff_t const size) {
+    auto out = buffer {size};
+    src.read(out.size(), out.data(), out.size());
     return out;
 }
+
+template <typename Source>
+buffer read_variable_field_at(Source& src, ptrdiff_t const size, ptrdiff_t const offset) {
+    src.seek(offset);
+    return read_variable_field(src, size);
+}
+
+struct tag_scalar_field        {};
+struct tag_array_field         {};
+struct tag_constructible_field {};
+
+template <typename T>
+struct field_tag {
+    using type = std::conditional_t<
+        std::is_scalar<T>::value, tag_scalar_field, tag_constructible_field>;
+};
+
+template <typename T, size_t N>
+struct field_tag<std::array<T, N>> {
+    using type = tag_array_field;
+};
+
+template <typename Tag, typename T>
+struct field_traits;
+
+template <typename T>
+struct field_traits<tag_scalar_field, T> {
+    inline static constexpr ptrdiff_t size() noexcept { return sizeof(T); }
+
+    template <typename Source>
+    inline static T read(Source& src) {
+        using U = uint_t<sizeof(T)>;
+        return static_cast<T>(little_endian_to_host(detail::read<U>(src)));
+    }
+};
+
+template <typename T>
+struct field_traits<tag_array_field, T> {
+    inline static constexpr ptrdiff_t size() noexcept { return sizeof(T); }
+
+    template <typename Source>
+    inline static T read(Source& src) {
+        return detail::read<T>(src);
+    }
+};
+
+template <typename T>
+struct field_traits<tag_constructible_field, T> {
+    inline static constexpr ptrdiff_t size() noexcept { return T::size; }
+
+    template <typename Source>
+    inline static T read(Source& src) {
+        return T {src};
+    }
+};
+
+template <typename T, ptrdiff_t Offset = 0, typename Tag = typename field_tag<T>::type, typename Traits = field_traits<Tag, T>>
+struct field : field_traits<Tag, T> {
+    using traits = Traits;
+    using tag    = Tag;
+    using type   = T;
+
+    inline static constexpr ptrdiff_t begin() noexcept { return Offset; }
+    inline static constexpr ptrdiff_t end()   noexcept { return begin() + traits::size(); }
+
+    template <typename Source>
+    inline static T read_at(Source& src, ptrdiff_t const offset) {
+        src.seek(offset);
+        return traits::read(src);
+    }
+
+    template <typename Source>
+    inline static T read_at(Source& src) {
+        return read_at(src, begin());
+    }
+};
 
 } // namespace bktga::detail
 
@@ -569,6 +537,14 @@ struct tga_image_descriptor {
     {
     }
 
+    template <typename Source>
+    explicit tga_image_descriptor(Source& src
+        , std::enable_if_t<!std::is_integral<Source>::value>* = nullptr
+    )
+      : tga_image_descriptor {detail::read<uint8_t>(src)}
+    {
+    }
+
     uint8_t attribute_bits() const noexcept {
         return static_cast<uint8_t>(value & 0b00001111);
     }
@@ -627,7 +603,7 @@ public:
 
     template <typename Source>
     detail::buffer get_data(Source&& src, record_t const r) const {
-        return read_field(detail::variable_field_t {r.size, r.offset}, src);
+        return detail::read_variable_field_at(src, r.size, r.offset);
     }
 
     auto   begin() const { return std::begin(records_); }
@@ -717,26 +693,26 @@ public:
 
     struct field {
         template <typename T, ptrdiff_t Offset>
-        using sf = detail::static_field_t<T, Offset>;
+        using f = detail::field<T, Offset>;
 
         using id_t = std::array<char, 41>;
         using comment_t = std::array<std::array<char, 81>, 4>;
 
-        using extension_size          = sf<uint16_t,           0>;
-        using author_name             = sf<id_t,               extension_size::end>;
-        using author_comments         = sf<comment_t,          author_name::end>;
-        using date_time_stamp         = sf<time_stamp_t,       author_comments::end>;
-        using job_name                = sf<id_t,               date_time_stamp::end>;
-        using job_time                = sf<job_time_t,         job_name::end>;
-        using software_name           = sf<id_t,               job_time::end>;
-        using software_version        = sf<software_version_t, software_name::end>;
-        using key_color               = sf<uint32_t,           software_version::end>;
-        using pixel_aspect_ratio      = sf<ratio_t,            key_color::end>;
-        using gamma_value             = sf<ratio_t,            pixel_aspect_ratio::end>;
-        using color_correction_offset = sf<uint32_t,           gamma_value::end>;
-        using postage_stamp_offset    = sf<uint32_t,           color_correction_offset::end>;
-        using scan_line_offset        = sf<uint32_t,           postage_stamp_offset::end>;
-        using attribute_type          = sf<tga_attribute_type, scan_line_offset::end>;
+        using extension_size          = f<uint16_t,           0>;
+        using author_name             = f<id_t,               extension_size::end()>;
+        using author_comments         = f<comment_t,          author_name::end()>;
+        using date_time_stamp         = f<time_stamp_t,       author_comments::end()>;
+        using job_name                = f<id_t,               date_time_stamp::end()>;
+        using job_time                = f<job_time_t,         job_name::end()>;
+        using software_name           = f<id_t,               job_time::end()>;
+        using software_version        = f<software_version_t, software_name::end()>;
+        using key_color               = f<uint32_t,           software_version::end()>;
+        using pixel_aspect_ratio      = f<ratio_t,            key_color::end()>;
+        using gamma_value             = f<ratio_t,            pixel_aspect_ratio::end()>;
+        using color_correction_offset = f<uint32_t,           gamma_value::end()>;
+        using postage_stamp_offset    = f<uint32_t,           color_correction_offset::end()>;
+        using scan_line_offset        = f<uint32_t,           postage_stamp_offset::end()>;
+        using attribute_type          = f<tga_attribute_type, scan_line_offset::end()>;
     };
 
     tga_extension_area() = default;
@@ -786,26 +762,26 @@ public:
         using signature_t = std::array<char, tga_footer_signature_size>;
 
         template <typename T, ptrdiff_t Offset>
-        using sf = detail::static_field_t<T, Offset>;
+        using f = detail::field<T, Offset>;
 
         //header fields
-        using id_length   = sf<uint8_t,              0>;
-        using cmap_type   = sf<tga_color_map_type,   id_length::end>;
-        using img_type    = sf<tga_image_type,       cmap_type::end>;
-        using cmap_start  = sf<uint16_t,             img_type::end>;
-        using cmap_len    = sf<uint16_t,             cmap_start::end>;
-        using cmap_depth  = sf<uint8_t,              cmap_len::end>;
-        using x_offset    = sf<uint16_t,             cmap_depth::end>;
-        using y_offset    = sf<uint16_t,             x_offset::end>;
-        using width       = sf<uint16_t,             y_offset::end>;
-        using height      = sf<uint16_t,             width::end>;
-        using pixel_depth = sf<uint8_t,              height::end>;
-        using image_desc  = sf<tga_image_descriptor, pixel_depth::end>;
+        using id_length   = f<uint8_t,              0>;
+        using cmap_type   = f<tga_color_map_type,   id_length::end()>;
+        using img_type    = f<tga_image_type,       cmap_type::end()>;
+        using cmap_start  = f<uint16_t,             img_type::end()>;
+        using cmap_len    = f<uint16_t,             cmap_start::end()>;
+        using cmap_depth  = f<uint8_t,              cmap_len::end()>;
+        using x_offset    = f<uint16_t,             cmap_depth::end()>;
+        using y_offset    = f<uint16_t,             x_offset::end()>;
+        using width       = f<uint16_t,             y_offset::end()>;
+        using height      = f<uint16_t,             width::end()>;
+        using pixel_depth = f<uint8_t,              height::end()>;
+        using image_desc  = f<tga_image_descriptor, pixel_depth::end()>;
 
         //footer fields
-        using ext_offset  = sf<uint32_t,             0>;
-        using dev_offset  = sf<uint32_t,             ext_offset::end>;
-        using signature   = sf<signature_t,          dev_offset::end>;
+        using ext_offset  = f<uint32_t,             0>;
+        using dev_offset  = f<uint32_t,             ext_offset::end()>;
+        using signature   = f<signature_t,          dev_offset::end()>;
     };
 
     tga_descriptor() = default;
@@ -999,18 +975,18 @@ struct tga_color_map {
     tga_color_map(tga_descriptor const& tga, Source& src)
       : first_ {tga.cmap_start}
     {
-        auto const field = detail::variable_field_t {
-            tga.is_color_mapped() ? tga.color_map_size() : 0
-          , tga.color_map_offset()
-        };
+        auto const field_size = tga.is_color_mapped()
+          ? tga.color_map_size() : 0;
 
-        if (field.size() <= 0) {
+        if (field_size <= 0) {
             return;
         }
 
         data_.reserve(tga.cmap_len);
-        auto const buffer = read_field(field, src);
-        auto       data   = detail::memory_source {buffer};
+        auto const buffer = detail::read_variable_field_at(
+            src, field_size, tga.color_map_offset());
+
+        auto data = detail::memory_source {buffer};
 
         switch (tga.cmap_depth) {
         case 8  : convert_to_32bpp_< 8>(data, tga.cmap_len); break;
@@ -1260,8 +1236,8 @@ inline decode_t decode(detect_result_t<Source>&& in) {
 //===----------------------------------------------------------------------===//
 template <typename OutIt, typename Source>
 OutIt read_id(detect_result_t<Source>& in, OutIt const dest) {
-    auto const buffer = detail::read_field(detail::variable_field_t {
-        in.tga.id_length, in.tga.id_offset()}, in.source);
+    auto const buffer = detail::read_variable_field_at(
+         in.source, in.tga.id_length, in.tga.id_offset());
 
     return std::copy(std::begin(buffer), std::end(buffer), dest);
 }

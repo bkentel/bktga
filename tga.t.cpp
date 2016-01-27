@@ -303,58 +303,58 @@ TEST_CASE("detect - bad", "[api]") {
     using field = bktga::tga_descriptor::field;
 
     SECTION("bad color map type") {
-        carray[field::cmap_type::begin] = 0;   // none
+        carray[field::cmap_type::begin()] = 0;   // none
         check();
-        carray[field::cmap_type::begin] = 127; // reserved
+        carray[field::cmap_type::begin()] = 127; // reserved
         check();
-        carray[field::cmap_type::begin] = 255; // custom
+        carray[field::cmap_type::begin()] = 255; // custom
         check();
     }
 
     SECTION("bad image type") {
-        carray[field::img_type::begin] = 127; // reserved
+        carray[field::img_type::begin()] = 127; // reserved
         check();
-        carray[field::img_type::begin] = 255; // custom
+        carray[field::img_type::begin()] = 255; // custom
         check();
     }
 
     SECTION("bad color map depth") {
-        carray[field::cmap_depth::begin] = 1;
+        carray[field::cmap_depth::begin()] = 1;
         check();
-        carray[field::cmap_depth::begin] = 33;
+        carray[field::cmap_depth::begin()] = 33;
         check();
     }
 
     SECTION("bad pixel depth") {
-        carray[field::pixel_depth::begin] = 1;
+        carray[field::pixel_depth::begin()] = 1;
         check();
-        carray[field::pixel_depth::begin] = 33;
+        carray[field::pixel_depth::begin()] = 33;
         check();
     }
 
     SECTION("bad attribute") {
         auto const set_attribute_bits = [&](int const bits) noexcept {
-            auto& value = carray[field::image_desc::begin];
+            auto& value = carray[field::image_desc::begin()];
             value = static_cast<uint8_t>(value | (bits & 0b1111));
         };
 
-        carray[field::cmap_depth::begin] = 8;
+        carray[field::cmap_depth::begin()] = 8;
         set_attribute_bits(1);
         check();
 
-        carray[field::cmap_depth::begin] = 15;
+        carray[field::cmap_depth::begin()] = 15;
         set_attribute_bits(1);
         check();
 
-        carray[field::cmap_depth::begin] = 16;
+        carray[field::cmap_depth::begin()] = 16;
         set_attribute_bits(2);
         check();
 
-        carray[field::cmap_depth::begin] = 24;
+        carray[field::cmap_depth::begin()] = 24;
         set_attribute_bits(1);
         check();
 
-        carray[field::cmap_depth::begin] = 32;
+        carray[field::cmap_depth::begin()] = 32;
         set_attribute_bits(1);
         check();
     }
