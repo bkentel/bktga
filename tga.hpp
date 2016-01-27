@@ -402,27 +402,19 @@ struct field_size;
 
 template <typename T>
 struct field_size<T, true>
-    : std::integral_constant<size_t, sizeof(T)>
-{
-};
+  : std::integral_constant<size_t, sizeof(T)> {};
 
 template <typename T>
 struct field_size<T, false>
-    : std::integral_constant<size_t, T::size>
-{
-};
+  : std::integral_constant<size_t, T::size> {};
 
 template <typename T, size_t N>
 struct field_size<T[N], false>
-    : std::integral_constant<size_t, sizeof(T) * N>
-{
-};
+  : std::integral_constant<size_t, sizeof(T) * N> {};
 
 template <typename T, size_t N>
 struct field_size<std::array<T, N>, false>
-    : std::integral_constant<size_t, sizeof(T) * N>
-{
-};
+  : std::integral_constant<size_t, sizeof(T) * N> {};
 
 /// statically sized and located data field
 template <typename T, ptrdiff_t Offset = 0>
@@ -432,6 +424,17 @@ struct static_field_t {
     static constexpr ptrdiff_t size  = field_size<T>::value;
     static constexpr ptrdiff_t begin = Offset;
     static constexpr ptrdiff_t end   = Offset + size;
+
+    template <typename Source>
+    static T read(Source& src) {
+        return detail::read_field(static_field_t {}, src);
+    }
+
+    template <typename Source>
+    static T read_at(Source& src, ptrdiff_t const offset) {
+        src.seek(offset);
+        return read(src);
+    }
 };
 
 /// variably sized and located data field
@@ -462,35 +465,30 @@ inline detail::buffer read_field(
 }
 
 template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_array_tag, Source& src, ptrdiff_t const offset = 0) {
-    return read_at<T>(src, Field::begin + offset);
+inline T read_field(read_field_array_tag, Source& src) {
+    return read<T>(src);
 }
 
 template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_scalar_tag, Source& src, ptrdiff_t const offset = 0) {
-    return static_cast<T>(little_endian_to_host(
-        read_at<uint_t<Field::size>>(src,  Field::begin + offset)));
+inline T read_field(read_field_scalar_tag, Source& src) {
+    return static_cast<T>(little_endian_to_host(read<uint_t<Field::size>>(src)));
 }
 
 template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_construct_tag, Source& src, ptrdiff_t const offset = 0) {
-    return T {little_endian_to_host(
-        read_at<uint_t<sizeof(T)>>(src, Field::begin + offset))};
+inline T read_field(read_field_construct_tag, Source& src) {
+    return T {little_endian_to_host(read<uint_t<sizeof(T)>>(src))};
 }
 
 /// Read a static field defined by field from src.
 template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(Field, Source& src, ptrdiff_t const offset = 0) {
-    using tag =
-        std::conditional_t<
-            std::is_scalar<T>::value
-          , read_field_scalar_tag
-        , std::conditional_t<
-            is_array<T>::value
+inline T read_field(Field, Source& src) {
+    using tag = std::conditional_t<std::is_scalar<T>::value
+      , read_field_scalar_tag
+      , std::conditional_t<is_array<T>::value
           , read_field_array_tag
           , read_field_construct_tag>>;
 
-    return read_field<Field>(tag {}, src, offset);
+    return read_field<Field>(tag {}, src);
 }
 
 } // namespace bktga::detail
@@ -644,6 +642,8 @@ private:
 class tga_extension_area {
 public:
     struct time_stamp_t {
+        time_stamp_t() = default;
+
         template <typename Source>
         time_stamp_t(Source& src)
           : month  {detail::read<uint16_t>(src)}
@@ -657,15 +657,17 @@ public:
 
         static constexpr size_t size = 6 * sizeof(uint16_t);
 
-        uint16_t month;
-        uint16_t day;
-        uint16_t year;
-        uint16_t hour;
-        uint16_t minute;
-        uint16_t second;
+        uint16_t month  {};
+        uint16_t day    {};
+        uint16_t year   {};
+        uint16_t hour   {};
+        uint16_t minute {};
+        uint16_t second {};
     };
 
     struct job_time_t {
+        job_time_t() = default;
+
         template <typename Source>
         job_time_t(Source& src)
           : hours   {detail::read<uint16_t>(src)}
@@ -676,12 +678,14 @@ public:
 
         static constexpr size_t size = 3 * sizeof(uint16_t);
 
-        uint16_t hours;
-        uint16_t minutes;
-        uint16_t seconds;
+        uint16_t hours   {};
+        uint16_t minutes {};
+        uint16_t seconds {};
     };
 
     struct software_version_t {
+        software_version_t() = default;
+
         template <typename Source>
         software_version_t(Source& src)
           : number {detail::read<uint16_t>(src)}
@@ -691,11 +695,13 @@ public:
 
         static constexpr size_t size = sizeof(uint16_t) + sizeof(char);
 
-        uint16_t number;
-        char     letter;
+        uint16_t number {};
+        char     letter {};
     };
 
     struct ratio_t {
+        ratio_t() = default;
+
         template <typename Source>
         ratio_t(Source& src)
           : num {detail::read<uint16_t>(src)}
@@ -705,8 +711,8 @@ public:
 
         static constexpr size_t size = 2 * sizeof(uint16_t);
 
-        uint16_t num;
-        uint16_t den;
+        uint16_t num {};
+        uint16_t den {};
     };
 
     struct field {
@@ -714,7 +720,7 @@ public:
         using sf = detail::static_field_t<T, Offset>;
 
         using id_t = std::array<char, 41>;
-        using comment_t = std::array<char, 324>;
+        using comment_t = std::array<std::array<char, 81>, 4>;
 
         using extension_size          = sf<uint16_t,           0>;
         using author_name             = sf<id_t,               extension_size::end>;
@@ -733,42 +739,43 @@ public:
         using attribute_type          = sf<tga_attribute_type, scan_line_offset::end>;
     };
 
+    tga_extension_area() = default;
 
     template <typename Source>
     tga_extension_area(Source& src, ptrdiff_t const offset)
-      : extension_size          {detail::read_field(field::extension_size          {}, src, offset)}
-      , author_name             {detail::read_field(field::author_name             {}, src, offset)}
-      , author_comments         {detail::read_field(field::author_comments         {}, src, offset)}
+      : extension_size          {field::extension_size::read_at(src, offset)}
+      , author_name             {field::author_name::read(src)}
+      , author_comments         {field::author_comments::read(src)}
       , date_time_stamp         {src}
-      , job_name                {detail::read_field(field::job_name                {}, src, offset)}
+      , job_name                {field::job_name::read(src)}
       , job_time                {src}
-      , software_name           {detail::read_field(field::software_name           {}, src, offset)}
+      , software_name           {field::software_name::read(src)}
       , software_version        {src}
-      , key_color               {detail::read_field(field::key_color               {}, src, offset)}
+      , key_color               {field::key_color::read(src)}
       , pixel_aspect_ratio      {src}
       , gamma_value             {src}
-      , color_correction_offset {detail::read_field(field::color_correction_offset {}, src, offset)}
-      , postage_stamp_offset    {detail::read_field(field::postage_stamp_offset    {}, src, offset)}
-      , scan_line_offset        {detail::read_field(field::scan_line_offset        {}, src, offset)}
-      , attribute_type          {detail::read_field(field::attribute_type          {}, src, offset)}
+      , color_correction_offset {field::color_correction_offset::read(src)}
+      , postage_stamp_offset    {field::postage_stamp_offset::read(src)}
+      , scan_line_offset        {field::scan_line_offset::read(src)}
+      , attribute_type          {field::attribute_type::read(src)}
     {
     }
 
-    field::extension_size::type          extension_size;
-    field::author_name::type             author_name;
-    field::author_comments::type         author_comments;
-    field::date_time_stamp::type         date_time_stamp;
-    field::job_name::type                job_name;
-    field::job_time::type                job_time;
-    field::software_name::type           software_name;
-    field::software_version::type        software_version;
-    field::key_color::type               key_color;
-    field::pixel_aspect_ratio::type      pixel_aspect_ratio;
-    field::gamma_value::type             gamma_value;
-    field::color_correction_offset::type color_correction_offset;
-    field::postage_stamp_offset::type    postage_stamp_offset;
-    field::scan_line_offset::type        scan_line_offset;
-    field::attribute_type::type          attribute_type;
+    field::extension_size::type          extension_size          {};
+    field::author_name::type             author_name             {};
+    field::author_comments::type         author_comments         {};
+    field::date_time_stamp::type         date_time_stamp         {};
+    field::job_name::type                job_name                {};
+    field::job_time::type                job_time                {};
+    field::software_name::type           software_name           {};
+    field::software_version::type        software_version        {};
+    field::key_color::type               key_color               {};
+    field::pixel_aspect_ratio::type      pixel_aspect_ratio      {};
+    field::gamma_value::type             gamma_value             {};
+    field::color_correction_offset::type color_correction_offset {};
+    field::postage_stamp_offset::type    postage_stamp_offset    {};
+    field::scan_line_offset::type        scan_line_offset        {};
+    field::attribute_type::type          attribute_type          {tga_attribute_type::no_data};
 };
 
 class tga_descriptor {
@@ -874,21 +881,21 @@ private:
 
     template <typename Source>
     tga_descriptor(Source& src, ptrdiff_t const fsize)
-      : id_length   {detail::read_field(field::id_length   {}, src)}
-      , cmap_type   {detail::read_field(field::cmap_type   {}, src)}
-      , img_type    {detail::read_field(field::img_type    {}, src)}
-      , cmap_start  {detail::read_field(field::cmap_start  {}, src)}
-      , cmap_len    {detail::read_field(field::cmap_len    {}, src)}
-      , cmap_depth  {detail::read_field(field::cmap_depth  {}, src)}
-      , x_offset    {detail::read_field(field::x_offset    {}, src)}
-      , y_offset    {detail::read_field(field::y_offset    {}, src)}
-      , width       {detail::read_field(field::width       {}, src)}
-      , height      {detail::read_field(field::height      {}, src)}
-      , pixel_depth {detail::read_field(field::pixel_depth {}, src)}
-      , image_desc  {detail::read_field(field::image_desc  {}, src)}
-      , ext_offset  {detail::read_field(field::ext_offset  {}, src, fsize - tga_footer_size)}
-      , dev_offset  {detail::read_field(field::dev_offset  {}, src, fsize - tga_footer_size)}
-      , signature   (detail::read_field(field::signature   {}, src, fsize - tga_footer_size))
+      : id_length   {field::id_length::read_at(src, 0)}
+      , cmap_type   {field::cmap_type::read(src)}
+      , img_type    {field::img_type::read(src)}
+      , cmap_start  {field::cmap_start::read(src)}
+      , cmap_len    {field::cmap_len::read(src)}
+      , cmap_depth  {field::cmap_depth::read(src)}
+      , x_offset    {field::x_offset::read(src)}
+      , y_offset    {field::y_offset::read(src)}
+      , width       {field::width::read(src)}
+      , height      {field::height::read(src)}
+      , pixel_depth {field::pixel_depth::read(src)}
+      , image_desc  {field::image_desc::read(src)}
+      , ext_offset  {field::ext_offset::read_at(src, fsize - tga_footer_size)}
+      , dev_offset  {field::dev_offset::read(src)}
+      , signature   (field::signature::read(src))
       , size        {fsize}
       , version     {tga_version::v1}
       , diagnostic  {check_()}
@@ -1267,6 +1274,16 @@ tga_developer_area read_developer_area(detect_result_t<Source>& in) {
     return (in && in.tga.dev_offset)
       ? tga_developer_area {in.source, in.tga.dev_offset}
       : tga_developer_area {};
+}
+
+//===----------------------------------------------------------------------===//
+//                              API - read_extension_area
+//===----------------------------------------------------------------------===//
+template <typename Source>
+tga_extension_area read_extension_area(detect_result_t<Source>& in) {
+    return (in && in.tga.ext_offset)
+      ? tga_extension_area {in.source, in.tga.ext_offset}
+      : tga_extension_area {};
 }
 
 } // namespace bktga
