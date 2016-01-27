@@ -396,6 +396,37 @@ inline auto read_bits(Source& in) {
     return out;
 }
 
+struct read_field_scalar_tag    {}; ///< @see read_field
+struct read_field_array_tag     {}; ///< @see read_field
+struct read_field_construct_tag {}; ///< @see read_field
+
+template <typename Field, typename Source, typename T = typename Field::type>
+inline T read_field(read_field_array_tag, Source& src) {
+    return read<T>(src);
+}
+
+template <typename Field, typename Source, typename T = typename Field::type>
+inline T read_field(read_field_scalar_tag, Source& src) {
+    return static_cast<T>(little_endian_to_host(read<uint_t<Field::size>>(src)));
+}
+
+template <typename Field, typename Source, typename T = typename Field::type>
+inline T read_field(read_field_construct_tag, Source& src) {
+    return T {little_endian_to_host(read<uint_t<sizeof(T)>>(src))};
+}
+
+/// Read a static field defined by field from src.
+template <typename Field, typename Source, typename T = typename Field::type>
+inline T read_field(Field, Source& src) {
+    using tag = std::conditional_t<std::is_scalar<T>::value
+      , read_field_scalar_tag
+      , std::conditional_t<is_array<T>::value
+          , read_field_array_tag
+          , read_field_construct_tag>>;
+
+    return read_field<Field>(tag {}, src);
+}
+
 /// Get the size of a field (required due to padding)
 template <typename T, bool IsScalar = std::is_scalar<T>::value>
 struct field_size;
@@ -447,10 +478,6 @@ struct variable_field_t {
     ptrdiff_t offset_;
 };
 
-struct read_field_scalar_tag    {}; ///< @see read_field
-struct read_field_array_tag     {}; ///< @see read_field
-struct read_field_construct_tag {}; ///< @see read_field
-
 /// Read a variable field defined by field from src.
 template <typename Source>
 inline detail::buffer read_field(
@@ -462,33 +489,6 @@ inline detail::buffer read_field(
     src.seek(field.begin() + offset);
     src.read(field.size(), out.data(), out.size());
     return out;
-}
-
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_array_tag, Source& src) {
-    return read<T>(src);
-}
-
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_scalar_tag, Source& src) {
-    return static_cast<T>(little_endian_to_host(read<uint_t<Field::size>>(src)));
-}
-
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(read_field_construct_tag, Source& src) {
-    return T {little_endian_to_host(read<uint_t<sizeof(T)>>(src))};
-}
-
-/// Read a static field defined by field from src.
-template <typename Field, typename Source, typename T = typename Field::type>
-inline T read_field(Field, Source& src) {
-    using tag = std::conditional_t<std::is_scalar<T>::value
-      , read_field_scalar_tag
-      , std::conditional_t<is_array<T>::value
-          , read_field_array_tag
-          , read_field_construct_tag>>;
-
-    return read_field<Field>(tag {}, src);
 }
 
 } // namespace bktga::detail
