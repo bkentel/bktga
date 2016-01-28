@@ -38,6 +38,14 @@ namespace detail = bktga::detail;
 
 namespace {
 
+template <size_t N>
+constexpr auto make_string_view(char const (&str)[N]) noexcept {
+    return bktga::string_view {str, N - 1};
+}
+
+constexpr auto path_tests       = make_string_view("./test/");
+constexpr auto path_test_output = make_string_view("./test/out/");
+
 template <typename Container>
 bktga::unique_file fill_temp_file(Container const& c) noexcept {
     using std::begin;
@@ -57,6 +65,14 @@ bktga::unique_file fill_temp_file(Container const& c) noexcept {
     return temp_file;
 }
 
+std::string test_file_path(bktga::string_view const fname) {
+    return path_tests.to_string().append(fname.begin(), fname.end());
+}
+
+std::string test_output_path(bktga::string_view const fname) {
+    return path_test_output.to_string().append(fname.begin(), fname.end());
+}
+
 template <typename Container>
 void write_raw(Container const& c, bktga::string_view const filename) noexcept {
     using std::begin;
@@ -64,9 +80,7 @@ void write_raw(Container const& c, bktga::string_view const filename) noexcept {
     using bktga::detail::size;
     using bktga::detail::data;
 
-    std::string fname = filename.to_string();
-    fname += ".raw";
-
+    auto const fname = test_output_path(filename) + ".raw";
     auto file = bktga::unique_file {std::fopen(fname.c_str(), "wb"), fclose};
     REQUIRE(file);
 
@@ -414,7 +428,7 @@ TEST_CASE("detect", "[api]") {
     }
 
     SECTION("file name") {
-        check(detect(bktga::read_from_file, "./test/cm-8-rgb24a0-756x512-rle.tga"));
+        check(detect(bktga::read_from_file, test_file_path("cm-8-rgb24a0-756x512-rle.tga")));
     }
 
     SECTION("file handle") {
@@ -458,7 +472,7 @@ namespace {
 
 template <typename It1, typename It2>
 bool create_dev_area_tga(
-    bktga::string_view const fname
+    std::string const& fname
   , It1 const first_record, It1 const last_record
   , It2 const first_data,   It2 const last_data
 ) {
@@ -472,7 +486,7 @@ bool create_dev_area_tga(
     };
 
     bktga::unique_file file {
-        fopen(fname.to_string().c_str(), "wb"), &fclose};
+        fopen(fname.c_str(), "wb"), &fclose};
 
     if (!file) {
         return false;
@@ -528,7 +542,7 @@ TEST_CASE("developer area", "[footer]") {
       , "record 4 data 4444"
     };
 
-    bktga::string_view const filename {"./test/dev.tga"};
+    auto const filename = test_output_path("dev.tga");
 
     REQUIRE(create_dev_area_tga(filename
       , begin(tags), end(tags), begin(data), end(data)));
@@ -552,21 +566,21 @@ TEST_CASE("developer area", "[footer]") {
 }
 
 TEST_CASE("extension area", "[footer]") {
-    auto result = detect(bktga::read_from_file, "./test/tc-rgb16a1-128x128.tga");
+    auto result = detect(bktga::read_from_file, test_file_path("tc-rgb16a1-128x128.tga"));
     auto const ext = bktga::read_extension_area(result);
 
 }
 
 TEST_CASE("convert", "[api]") {
     bktga::string_view const files[] {
-        "./test/cm-8-rgb24a0-756x512-rle.tga"
-      , "./test/tc-rgb16a1-128x128.tga"
-      , "./test/tc-rgb16a1-128x128-rle.tga"
-      , "./test/tc-rgb32a8-16x16-rle.tga"
+        "cm-8-rgb24a0-756x512-rle.tga"
+      , "tc-rgb16a1-128x128.tga"
+      , "tc-rgb16a1-128x128-rle.tga"
+      , "tc-rgb32a8-16x16-rle.tga"
     };
 
     for (auto const& fname : files) {
-        auto result  = detect(bktga::read_from_file, fname);
+        auto result  = detect(bktga::read_from_file, test_file_path(fname));
         auto decoded = bktga::decode(result);
         write_raw(decoded, fname);
     }

@@ -34,6 +34,7 @@
 #include <array>                             // for array
 #include <iterator>                          // for back_inserter
 #include <memory>                            // for unique_ptr
+#include <string>                            // for string
 #include <type_traits>                       // for conditional_t, etc
 #include <vector>                            // for vector
 #include <initializer_list>                  // for std::initializer_list
@@ -1182,6 +1183,19 @@ inline auto detect(read_from_file_t, string_view const filename)
     -> detect_result_t<detail::file_source>
 {
     return detail::detect(detail::file_source {filename});
+}
+
+inline auto detect(read_from_file_t, std::string const& filename)
+    -> detect_result_t<detail::file_source>
+{
+    return detect(read_from_file, string_view {filename});
+}
+
+template <size_t N>
+inline auto detect(read_from_file_t, char const (&filename)[N])
+    -> detect_result_t<detail::file_source>
+{
+    return detect(read_from_file, string_view {filename, N});
 }
 
 template <typename Byte, typename Size>
