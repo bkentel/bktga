@@ -100,8 +100,7 @@ template <typename T>
 using is_byte_type = std::integral_constant<bool
   , std::is_integral<T>::value && sizeof(T) == 1>;
 
-/// Return the number of bytes (rounded up) required for @p n bits where
-/// @p n >= 0; otherwise 0.
+//! ceil(n / 8.0) for n >= 0; otherwise 0.
 template <typename T>
 inline constexpr ptrdiff_t round_up_bits_to_bytes(T const n) noexcept {
     static_assert(std::is_integral<T>::value, "");
@@ -110,15 +109,16 @@ inline constexpr ptrdiff_t round_up_bits_to_bytes(T const n) noexcept {
       : 0;
 }
 
-/// A wrapper around a dynamically allocated buffer.
+//! A wrapper around a dynamically allocated buffer.
+//! Primarily this is used as storage for variable sized fields. A vector or
+//! string would (might) incur extra cost for first being zeroed.
 class buffer {
 public:
     buffer() = default;
 
-    template <typename T
-      , typename = std::enable_if_t<std::is_integral<T>::value>>
-    explicit buffer(T const size)
-      : buffer {size, std::is_signed<T> {}}
+    explicit buffer(ptrdiff_t const size)
+      : size_ {size}
+      , data_ {size > 0 ? new char[static_cast<size_t>(size)] : nullptr}
     {
     }
 
@@ -128,26 +128,11 @@ public:
     char const* begin() const noexcept { return data(); }
     char const* end()   const noexcept { return data() + size_; }
 private:
-    //unsigned
-    template <typename T>
-    explicit buffer(T const size, std::false_type)
-      : size_ {static_cast<ptrdiff_t>(size)}
-      , data_ {size ? new char[size] : nullptr}
-    {
-    }
-
-    //signed
-    template <typename T>
-    explicit buffer(T const size, std::true_type)
-      : buffer {static_cast<size_t>(size > 0 ? size : 0), std::false_type {}}
-    {
-    }
-
-    ptrdiff_t                size_ = 0;
-    std::unique_ptr<char []> data_;
+    ptrdiff_t                size_ {};
+    std::unique_ptr<char []> data_ {};
 };
 
-/// Minimum value clamped to a floor of 0.
+//! equivalent to max(min(a, b), 0)
 template <typename T>
 inline constexpr T min_0(T const a, T const b) noexcept {
     return (a < b)
@@ -155,13 +140,13 @@ inline constexpr T min_0(T const a, T const b) noexcept {
              : (b < 0 ? 0 : b);
 }
 
-/// @see min_0(a, b)
+//! equivalent to max(min(a, b, c), 0)
 template <typename T>
 inline constexpr T min_0(T const a, T const b, T const c) noexcept {
     return min_0(min_0(a, b), c);
 }
 
-/// c++17 std::data()
+// c++17 std::data()
 template <typename Container>
 inline constexpr auto data(Container&& c) noexcept {
     return c.data();
@@ -177,7 +162,7 @@ inline constexpr T const* data(std::initializer_list<T> ilist) noexcept {
     return ilist.begin();
 }
 
-/// c++17 std::size()
+// c++17 std::size()
 template <typename T, size_t Size>
 inline constexpr size_t size(T (&)[Size]) noexcept {
     return Size;
@@ -187,7 +172,6 @@ template <typename Container>
 inline constexpr auto size(Container&& c) noexcept -> decltype(c.size()) {
     return c.size();
 }
-
 
 } // namespace bktga::detail
 
@@ -267,11 +251,14 @@ template <> inline constexpr uint32_t to_rgba<8>(uint32_t const n) noexcept {
 /// filesystem data source
 class file_source {
 public:
+    //! Throwing version for opening files by name/
+    //! @throws std::system_error
     explicit file_source(string_view const fname)
       : file_source {do_open_(fname.to_string().c_str())}
     {
     }
 
+    //! Non-throwing version for already opened files
     explicit file_source(unique_file file) noexcept
       : handle_ {std::move(file)}
     {
@@ -302,7 +289,7 @@ private:
     static unique_file do_open_(char const* const fname) {
         auto const handle = fopen(fname, "rb");
         if (!handle) {
-            throw std::system_error(errno, std::system_category());
+            throw std::system_error {errno, std::system_category()};
         }
 
         return {handle, std::fclose};
@@ -358,20 +345,20 @@ private:
 };
 
 template <typename T, typename Source>
-inline T read(Source& src) {
+inline T read(Source& src) noexcept {
     T out;
     src.read(sizeof(T), reinterpret_cast<char*>(&out), sizeof(T));
     return out;
 }
 
 template <typename T, typename Source>
-inline T read_at(Source& src, ptrdiff_t const offset) {
+inline T read_at(Source& src, ptrdiff_t const offset) noexcept {
     src.seek(offset);
     return read<T>(src);
 }
 
 template <ptrdiff_t Bits, typename Source>
-inline auto read_bits(Source& src) {
+inline auto read_bits(Source& src) noexcept {
     using U = uint_t<round_up_bits_to_bytes(Bits)>;
     return read<U>(src);
 }
@@ -412,7 +399,7 @@ struct field_traits<tag_scalar_field, T> {
     inline static constexpr ptrdiff_t size() noexcept { return sizeof(T); }
 
     template <typename Source>
-    inline static T read(Source& src) {
+    inline static T read(Source& src) noexcept {
         using U = uint_t<sizeof(T)>;
         return static_cast<T>(little_endian_to_host(detail::read<U>(src)));
     }
@@ -423,7 +410,7 @@ struct field_traits<tag_array_field, T> {
     inline static constexpr ptrdiff_t size() noexcept { return sizeof(T); }
 
     template <typename Source>
-    inline static T read(Source& src) {
+    inline static T read(Source& src) noexcept {
         return detail::read<T>(src);
     }
 };
@@ -433,13 +420,14 @@ struct field_traits<tag_constructible_field, T> {
     inline static constexpr ptrdiff_t size() noexcept { return T::size; }
 
     template <typename Source>
-    inline static T read(Source& src) {
+    inline static T read(Source& src) noexcept {
+        static_assert(std::is_nothrow_constructible<T, Source&>::value, "");
         return T {src};
     }
 };
 
 template <typename T, ptrdiff_t Offset = 0, typename Tag = typename field_tag<T>::type, typename Traits = field_traits<Tag, T>>
-struct field : field_traits<Tag, T> {
+struct field : Traits {
     using traits = Traits;
     using tag    = Tag;
     using type   = T;
@@ -448,13 +436,13 @@ struct field : field_traits<Tag, T> {
     inline static constexpr ptrdiff_t end()   noexcept { return begin() + traits::size(); }
 
     template <typename Source>
-    inline static T read_at(Source& src, ptrdiff_t const offset) {
+    inline static T read_at(Source& src, ptrdiff_t const offset) noexcept {
         src.seek(offset);
         return traits::read(src);
     }
 
     template <typename Source>
-    inline static T read_at(Source& src) {
+    inline static T read_at(Source& src) noexcept {
         return read_at(src, begin());
     }
 };
@@ -540,7 +528,7 @@ struct tga_image_descriptor {
     template <typename Source>
     explicit tga_image_descriptor(Source& src
         , std::enable_if_t<!std::is_integral<Source>::value>* = nullptr
-    )
+    ) noexcept
       : tga_image_descriptor {detail::read<uint8_t>(src)}
     {
     }
@@ -618,10 +606,12 @@ private:
 class tga_extension_area {
 public:
     struct time_stamp_t {
+        static constexpr size_t size = 6 * sizeof(uint16_t);
+
         time_stamp_t() = default;
 
         template <typename Source>
-        time_stamp_t(Source& src)
+        explicit time_stamp_t(Source& src) noexcept
           : month  {detail::read<uint16_t>(src)}
           , day    {detail::read<uint16_t>(src)}
           , year   {detail::read<uint16_t>(src)}
@@ -630,8 +620,6 @@ public:
           , second {detail::read<uint16_t>(src)}
         {
         }
-
-        static constexpr size_t size = 6 * sizeof(uint16_t);
 
         uint16_t month  {};
         uint16_t day    {};
@@ -642,17 +630,17 @@ public:
     };
 
     struct job_time_t {
+        static constexpr size_t size = 3 * sizeof(uint16_t);
+
         job_time_t() = default;
 
         template <typename Source>
-        job_time_t(Source& src)
+        explicit job_time_t(Source& src) noexcept
           : hours   {detail::read<uint16_t>(src)}
           , minutes {detail::read<uint16_t>(src)}
           , seconds {detail::read<uint16_t>(src)}
         {
         }
-
-        static constexpr size_t size = 3 * sizeof(uint16_t);
 
         uint16_t hours   {};
         uint16_t minutes {};
@@ -660,32 +648,32 @@ public:
     };
 
     struct software_version_t {
+        static constexpr size_t size = sizeof(uint16_t) + sizeof(char);
+
         software_version_t() = default;
 
         template <typename Source>
-        software_version_t(Source& src)
+        explicit software_version_t(Source& src) noexcept
           : number {detail::read<uint16_t>(src)}
           , letter {detail::read<char>(src)}
         {
         }
-
-        static constexpr size_t size = sizeof(uint16_t) + sizeof(char);
 
         uint16_t number {};
         char     letter {};
     };
 
     struct ratio_t {
+        static constexpr size_t size = 2 * sizeof(uint16_t);
+
         ratio_t() = default;
 
         template <typename Source>
-        ratio_t(Source& src)
+        explicit ratio_t(Source& src) noexcept
           : num {detail::read<uint16_t>(src)}
           , den {detail::read<uint16_t>(src)}
         {
         }
-
-        static constexpr size_t size = 2 * sizeof(uint16_t);
 
         uint16_t num {};
         uint16_t den {};
@@ -722,14 +710,14 @@ public:
       : extension_size          {field::extension_size::read_at(src, offset)}
       , author_name             (field::author_name::read(src))
       , author_comments         (field::author_comments::read(src))
-      , date_time_stamp         {src}
+      , date_time_stamp         {field::date_time_stamp::read(src)}
       , job_name                (field::job_name::read(src))
-      , job_time                {src}
+      , job_time                {field::job_time::read(src)}
       , software_name           (field::software_name::read(src))
-      , software_version        {src}
+      , software_version        {field::software_version::read(src)}
       , key_color               {field::key_color::read(src)}
-      , pixel_aspect_ratio      {src}
-      , gamma_value             {src}
+      , pixel_aspect_ratio      {field::pixel_aspect_ratio::read(src)}
+      , gamma_value             {field::gamma_value::read(src)}
       , color_correction_offset {field::color_correction_offset::read(src)}
       , postage_stamp_offset    {field::postage_stamp_offset::read(src)}
       , scan_line_offset        {field::scan_line_offset::read(src)}

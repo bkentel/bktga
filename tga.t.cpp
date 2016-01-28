@@ -96,7 +96,7 @@ TEST_CASE("buffer", "[utility]") {
     using bktga::detail::buffer;
 
     auto const check = [](auto const size) {
-        buffer const b {size};
+        buffer const b {static_cast<ptrdiff_t>(size)};
         REQUIRE(b.size()  == static_cast<ptrdiff_t>(size));
 
         REQUIRE(reinterpret_cast<std::uintptr_t>(b.begin())
@@ -561,6 +561,8 @@ TEST_CASE("convert", "[api]") {
     bktga::string_view const files[] {
         "./test/cm-8-rgb24a0-756x512-rle.tga"
       , "./test/tc-rgb16a1-128x128.tga"
+      , "./test/tc-rgb16a1-128x128-rle.tga"
+      , "./test/tc-rgb32a8-16x16-rle.tga"
     };
 
     for (auto const& fname : files) {
