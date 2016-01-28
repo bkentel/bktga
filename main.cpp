@@ -1,20 +1,29 @@
-//#include "tga.hpp"
+#if defined(_MSC_VER)
+#   pragma warning(push)
+#   pragma warning(disable : 4061)
+#   pragma warning(disable : 4571)
+#   pragma warning(disable : 4625)
+#   pragma warning(disable : 4626)
+#   pragma warning(disable : 5026)
+#   pragma warning(disable : 5027)
+#endif
 
-//int main() {
-//    constexpr char filename[] = R"(D:\Users\Brandon\Downloads\256 Colors (RLE).tga)";
-//
-//    auto file_result = bktga::check_file(filename);
-//
-//    if (file_result.first) {
-//        auto const result = bktga::decode(*file_result.first, std::ifstream {filename, std::ios::binary});
-//    } else {
-//
-//    }
-//
-//
-//    //std::ofstream out{R"(./out.raw)", std::ios::binary};
-//    //out.write(reinterpret_cast<char const*>(result.data()),
-//    //          result.size() * sizeof(uint32_t));
-//
-//    return 0;
-//}
+#if defined(_MSC_VER) && _MSC_FULL_VER >= 190023506
+#   define CATCH_CONFIG_CPP11_NULLPTR
+#   define CATCH_CONFIG_CPP11_NOEXCEPT
+#   define CATCH_CONFIG_CPP11_GENERATED_METHODS
+#   define CATCH_CONFIG_CPP11_IS_ENUM
+#   define CATCH_CONFIG_CPP11_TUPLE
+#   define CATCH_CONFIG_CPP11_LONG_LONG
+#   define CATCH_CONFIG_CPP11_OVERRIDE
+#   define CATCH_CONFIG_CPP11_UNIQUE_PTR
+#   define CATCH_CONFIG_CPP11_OR_GREATER
+#   define CATCH_CONFIG_VARIADIC_MACROS
+#endif
+
+#define CATCH_CONFIG_MAIN
+#include <Catch/catch.hpp>
+
+#if defined(_MSC_VER)
+#   pragma warning(pop)
+#endif
