@@ -255,6 +255,12 @@ TEST_CASE("data source - read", "[io]") {
         check_source(source);
     }
 
+    SECTION("bad file_source") {
+        REQUIRE_THROWS_AS(
+            bktga::detail::file_source {"non-existant-file.none"}
+          , std::system_error);
+    }
+
     SECTION("memory_source") {
         auto source = bktga::detail::memory_source {data};
         check_source(source);
@@ -574,8 +580,10 @@ TEST_CASE("extension area", "[footer]") {
 TEST_CASE("convert", "[api]") {
     bktga::string_view const files[] {
         "cm-8-rgb24a0-756x512-rle.tga"
+      , "tc-rgb15a0-128x128-rle.tga"
       , "tc-rgb16a1-128x128.tga"
       , "tc-rgb16a1-128x128-rle.tga"
+      , "tc-rgb24a0-16x16-rle.tga"
       , "tc-rgb32a8-16x16-rle.tga"
     };
 

@@ -1195,7 +1195,7 @@ template <size_t N>
 inline auto detect(read_from_file_t, char const (&filename)[N])
     -> detect_result_t<detail::file_source>
 {
-    return detect(read_from_file, string_view {filename, N});
+    return detect(read_from_file, string_view {filename, N - 1});
 }
 
 template <typename Byte, typename Size>
