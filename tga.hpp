@@ -306,6 +306,8 @@ private:
 /// in-memory data source
 class memory_source {
 public:
+    memory_source() = default;
+
     template <typename Byte, typename Size>
     memory_source(Byte const* const data, Size const size) noexcept
       : first_ {reinterpret_cast<char const*>(data)}
@@ -342,9 +344,9 @@ public:
              : first_ + offset;
     }
 private:
-    char const* first_;
-    char const* last_;
-    char const* pos_;
+    char const* first_ {};
+    char const* last_  {};
+    char const* pos_   {};
 };
 
 template <typename T, typename Source>
