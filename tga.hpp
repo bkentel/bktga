@@ -27,7 +27,12 @@
 // BKTGA_ASSERT_OPT_IMPL  The function to use for -always- assertions.
 
 #if !defined(BKTGA_STRING_VIEW)
-#   include <boost/utility/string_ref.hpp>
+#   include <boost/version.hpp>
+#   if BOOST_VERSION < 106100
+#       include <boost/utility/string_ref.hpp>
+#   else
+#       include <boost/utility/string_view.hpp>
+#   endif
 #endif
 
 #include <algorithm>                         // for forward
@@ -76,7 +81,11 @@ namespace bktga {
 //                              Type Aliases
 //===----------------------------------------------------------------------===//
 #if !defined(BKTGA_STRING_VIEW)
+#   if BOOST_VERSION < 106100
 using string_view = ::boost::string_ref;
+#   else
+using string_view = ::boost::string_view;
+#   endif
 #endif
 
 //===----------------------------------------------------------------------===//

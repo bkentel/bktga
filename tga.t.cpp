@@ -44,8 +44,8 @@ constexpr auto make_string_view(char const (&str)[N]) noexcept {
     return bktga::string_view {str, N - 1};
 }
 
-constexpr auto path_tests       = make_string_view("./test/");
-constexpr auto path_test_output = make_string_view("./test/out/");
+bktga::string_view const path_tests       {"./test/"};
+bktga::string_view const path_test_output {"./test/out/"};
 
 template <typename Container>
 bktga::unique_file fill_temp_file(Container const& c) noexcept {
