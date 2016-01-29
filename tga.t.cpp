@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <iostream>
 
 namespace detail = bktga::detail;
 
@@ -380,7 +381,6 @@ TEST_CASE("detect - bad", "[api]") {
     }
 }
 
-
 TEST_CASE("detect", "[api]") {
     using bktga::detect;
 
@@ -591,6 +591,30 @@ TEST_CASE("convert", "[api]") {
         auto result  = detect(bktga::read_from_file, test_file_path(fname));
         auto decoded = bktga::decode(result);
         write_raw(decoded, fname);
+    }
+}
+
+TEST_CASE("example 1", "[example]") {
+    namespace tga = ::bktga;
+
+    std::vector<std::string> const files {
+        "./test/tc-rgb16a1-128x128-rle.tga"
+      , "./tga.hpp"
+      , "./non-existant-file.none"
+    };
+
+    for (auto const& file : files) {
+        auto result = tga::detect(tga::read_from_file, file);
+        if (!result) {
+            REQUIRE(file != files[0]);
+            std::cerr << "Cannot open \"" << file << "\" as TGA: " << result.error() << std::endl;
+            continue;
+        }
+
+        REQUIRE(file == files[0]);
+        auto const data = tga::decode(result);
+        std::cout << "Okay" << std::endl;
+        // use data...
     }
 }
 

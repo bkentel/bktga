@@ -252,6 +252,8 @@ template <> inline constexpr uint32_t to_rgba<8>(uint32_t const n) noexcept {
 /// filesystem data source
 class file_source {
 public:
+    file_source() = default;
+
     //! Throwing version for opening files by name/
     //! @throws std::system_error
     explicit file_source(string_view const fname)
@@ -298,7 +300,7 @@ private:
 
     operator FILE*() const noexcept { return handle_.get(); }
 
-    unique_file handle_;
+    unique_file handle_ {nullptr, &fclose};
 };
 
 /// in-memory data source
@@ -1013,17 +1015,30 @@ using decode_t = std::vector<uint32_t>;
 template <typename Source>
 class detect_result_t {
 public:
+    explicit detect_result_t(std::error_code error)
+      : error_code {std::move(error)}
+    {
+        tga.diagnostic = "system error";
+    }
+
     explicit detect_result_t(Source&& src)
       : detect_result_t {tga_descriptor {src}, std::move(src)}
     {
     }
 
     explicit operator bool() const noexcept {
-        return tga.is_valid();
+        return !error_code && tga.is_valid();
     }
 
-    tga_descriptor tga;
-    Source         source;
+    std::string error() const {
+        return error_code
+          ? error_code.message()
+          : tga.diagnostic.to_string();
+    }
+
+    tga_descriptor  tga        {};
+    Source          source     {};
+    std::error_code error_code {};
 private:
     detect_result_t(tga_descriptor&& tga_data, Source&& src)
       : tga    {std::move(tga_data)}
@@ -1182,7 +1197,11 @@ inline auto detect(unique_file file)
 inline auto detect(read_from_file_t, string_view const filename)
     -> detect_result_t<detail::file_source>
 {
-    return detail::detect(detail::file_source {filename});
+    try {
+        return detail::detect(detail::file_source {filename});
+    } catch (std::system_error const& e) {
+        return detect_result_t<detail::file_source> {e.code()};
+    }
 }
 
 inline auto detect(read_from_file_t, std::string const& filename)
