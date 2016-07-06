@@ -9,30 +9,38 @@ A minimal, but fully TGA 2.0 standard compliant parser.
 ## Examples
 
 ```cpp
+#include <bktga/tga.hpp>
+#include <vector>
 #include <iostream>
-#include "bktga.hpp"
 
 int main() {
-    constexpr char filename[] = "./test/8-bit-rle.tga";
+    namespace tga = ::bktga;
 
-    // Check if filename represents what looks like a valid TGA file.
-    // std::pair<optional, string_view>
-    auto const result = bktga::check_file(filename);
-    if (!result.first) {
-        std::cerr << "Error: " << result.second.to_string() << std::endl;
-        return 1;
+    std::vector<std::string> const files {
+        "./test/tc-rgb16a1-128x128-rle.tga"
+      , "./tga.hpp"
+      , "./non-existant-file.none"
+    };
+
+    for (auto const& file : files) {
+        auto result = tga::detect(tga::read_from_file, file);
+        if (!result) {
+            std::cerr << "Cannot open \"" << file << "\" as TGA: " << result.error() << '\n';
+            continue;
+        }
+
+        auto const data = tga::decode(result);
+        std::cout << "Okay" << std::endl;
+        // use data...
     }
-
-    // bktga::tga_descriptor
-    auto const& tga = *result.first;
-
-    // Convert the seemingly valid TGA to a flat buffer of ABGR data.
-    // std::vector<uint32_t>
-    auto converted = bktga::decode(tga, filename);
 
     return 0;
 }
-
+```
+```
+Okay
+Cannot open "./tga.hpp" as TGA: unknown reserved image type
+Cannot open "./non-existant-file.none" as TGA: The system cannot find the file specified.
 ```
 
 ## Compiler Support

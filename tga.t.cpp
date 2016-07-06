@@ -33,6 +33,7 @@
 #include <algorithm>
 #include <array>
 #include <numeric>
+#include <iostream>
 
 namespace detail = bktga::detail;
 
@@ -43,8 +44,8 @@ constexpr auto make_string_view(char const (&str)[N]) noexcept {
     return bktga::string_view {str, N - 1};
 }
 
-constexpr auto path_tests       = make_string_view("./test/");
-constexpr auto path_test_output = make_string_view("./test/out/");
+bktga::string_view const path_tests       {"./test/"};
+bktga::string_view const path_test_output {"./test/out/"};
 
 template <typename Container>
 bktga::unique_file fill_temp_file(Container const& c) noexcept {
@@ -255,6 +256,12 @@ TEST_CASE("data source - read", "[io]") {
         check_source(source);
     }
 
+    SECTION("bad file_source") {
+        REQUIRE_THROWS_AS(
+            bktga::detail::file_source {"non-existant-file.none"}
+          , std::system_error);
+    }
+
     SECTION("memory_source") {
         auto source = bktga::detail::memory_source {data};
         check_source(source);
@@ -374,7 +381,6 @@ TEST_CASE("detect - bad", "[api]") {
     }
 }
 
-
 TEST_CASE("detect", "[api]") {
     using bktga::detect;
 
@@ -409,7 +415,7 @@ TEST_CASE("detect", "[api]") {
         std::array<uint8_t, header_size> array;
         std::copy_n(carray, header_size, array.data());
 
-        std::vector<uint8_t> const vector {begin(array), end(array)};
+        std::vector<uint8_t> const vector(begin(array), end(array));
 
         // from c-array
         check(detect(carray));
@@ -574,8 +580,10 @@ TEST_CASE("extension area", "[footer]") {
 TEST_CASE("convert", "[api]") {
     bktga::string_view const files[] {
         "cm-8-rgb24a0-756x512-rle.tga"
+      , "tc-rgb15a0-128x128-rle.tga"
       , "tc-rgb16a1-128x128.tga"
       , "tc-rgb16a1-128x128-rle.tga"
+      , "tc-rgb24a0-16x16-rle.tga"
       , "tc-rgb32a8-16x16-rle.tga"
     };
 
@@ -583,6 +591,30 @@ TEST_CASE("convert", "[api]") {
         auto result  = detect(bktga::read_from_file, test_file_path(fname));
         auto decoded = bktga::decode(result);
         write_raw(decoded, fname);
+    }
+}
+
+TEST_CASE("example 1", "[example]") {
+    namespace tga = ::bktga;
+
+    std::vector<std::string> const files {
+        "./test/tc-rgb16a1-128x128-rle.tga"
+      , "./tga.hpp"
+      , "./non-existant-file.none"
+    };
+
+    for (auto const& file : files) {
+        auto result = tga::detect(tga::read_from_file, file);
+        if (!result) {
+            REQUIRE(file != files[0]);
+            std::cerr << "Cannot open \"" << file << "\" as TGA: " << result.error() << std::endl;
+            continue;
+        }
+
+        REQUIRE(file == files[0]);
+        auto const data = tga::decode(result);
+        std::cout << "Okay" << std::endl;
+        // use data...
     }
 }
 

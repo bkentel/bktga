@@ -55,7 +55,7 @@
       <SDLCheck>true</SDLCheck>
       <EnablePREfast>false</EnablePREfast>
       <DisableSpecificWarnings>4710;4514;4371;4626;4820;4668</DisableSpecificWarnings>
-      <SmallerTypeCheck>true</SmallerTypeCheck>
+      <SmallerTypeCheck>false</SmallerTypeCheck>
       <EnforceTypeConversionRules>true</EnforceTypeConversionRules>
       <CompileAs>CompileAsCpp</CompileAs>
       <PreprocessorDefinitions>_HAS_OLD_IOSTREAMS_MEMBERS=0;_HAS_FUNCTION_ASSIGN=0</PreprocessorDefinitions>
