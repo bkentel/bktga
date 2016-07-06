@@ -415,7 +415,7 @@ TEST_CASE("detect", "[api]") {
         std::array<uint8_t, header_size> array;
         std::copy_n(carray, header_size, array.data());
 
-        std::vector<uint8_t> const vector {begin(array), end(array)};
+        std::vector<uint8_t> const vector(begin(array), end(array));
 
         // from c-array
         check(detect(carray));

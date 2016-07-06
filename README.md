@@ -10,6 +10,7 @@ A minimal, but fully TGA 2.0 standard compliant parser.
 
 ```cpp
 #include <bktga/tga.hpp>
+#include <vector>
 #include <iostream>
 
 int main() {
@@ -24,7 +25,7 @@ int main() {
     for (auto const& file : files) {
         auto result = tga::detect(tga::read_from_file, file);
         if (!result) {
-            std::cerr << "Cannot open \"" << file << "\" as TGA: " << result.error() << std::endl;
+            std::cerr << "Cannot open \"" << file << "\" as TGA: " << result.error() << '\n';
             continue;
         }
 
